@@ -1,26 +1,55 @@
 body {
   color: #1f1d1d;
-  background-color: #f4f3ef;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  background-color: #e1e0db;
+  font-family: "Nunito Sans", sans-serif;
 }
 
 text {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  font-family: "Nunito Sans", sans-serif;
   fill: #1f1d1d;
 }
 
 .container {
   text-align: center;
-  margin: 5em;
+  margin: 2em;
 }
 
 .text {
-  max-width: 900px;
+  max-width: 75vw;
   margin: auto;
 }
 
 a {
   color: #1f1d1d;
+}
+
+.selected-movie-list {
+  background-color: white;
+  width: 319px;
+  border: 1px solid #1f1d1d33;
+  position: absolute;
+  top: 310px;
+  left: 920px;
+  padding: 0.5em 1em;
+}
+
+.empty-state {
+  font-size: 12px;
+  font-style: italic;
+}
+
+.movie-title {
+  font-size: 18px;
+  border-bottom: 1px solid #e1e0db;
+  padding-bottom: 1em;
+}
+
+.movie-title:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.views-text {
+  font-style: italic;
+  font-size: 12px;
 }

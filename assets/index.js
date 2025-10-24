@@ -2,9 +2,9 @@ import { topWords, wordCategories } from './constants/words.js';
 import { colors } from './constants/colors.js';
 
 // set the dimensions and margins of the heatmap
-const margin = {top: 50, right: 140, bottom: 250, left: 140},
-  width = 750 - margin.left - margin.right,
-  height = 1550 - margin.top - margin.bottom;
+const margin = {top: 50, right: 640, bottom: 250, left: 100},
+  width = 1275 - margin.left - margin.right,
+  height = 1700 - margin.top - margin.bottom;
 
 // column labels = runtimes (in minutes)
 const runtimes = d3.range(20, 200, 10);
@@ -29,20 +29,76 @@ svg.append("g")
   .call(d3.axisTop(x).tickValues(runtimes.filter(d => d % 20 === 0)).tickSize(0))
   .call(g => g.select(".domain").remove());
 
+// add centered x-axis label
+svg.append("text")
+  .attr("class", "x-axis-label")
+  .attr("x", width / 2)
+  .attr("y", -25)
+  .attr("text-anchor", "middle")
+  .style("font-size", "12px")
+  .text("Runtime (mins)");
+
 // y scale
 const y = d3.scaleBand()
   .range([ 0, height ])
   .domain(topWords)
   .padding(0.01);
 
-// add y-axis labels
-svg.append("g")
-  .attr("transform", `translate(${width}, 0)`)
-  .call(d3.axisRight(y).tickSize(0))
-  .call(g => g.select(".domain").remove());
+// add y-axis labels on the left
+const yAxisG = svg.append("g")
+  .attr("class", "y-axis")
+  .attr("transform", `translate(-5, 0)`) // left side
+  .call(d3.axisLeft(y).tickSize(0))
+  .call(g => g.select(".domain").remove())
+  // set default tick text styles so we can animate to the active state
+  .call(g => g.selectAll('.tick text').style('font-size', '12px').style('font-weight', 'normal'));
 
-// add word category labels and brackets on the left
-const categoryAxisOffset = -5;
+// helper to highlight a y tick (word) and reset
+const highlightTick = (word) => {
+  yAxisG.selectAll('.tick')
+    .filter(d => d === word)
+    .select('text')
+    .raise()
+    .transition()
+    .duration(100)
+    .style('font-size', '16px')
+    .style('font-weight', 'bold');
+}
+
+const resetHighlight = () => {
+  yAxisG.selectAll('.tick').select('text')
+    .transition()
+    .duration(100)
+    .style('font-size', '12px')
+    .style('font-weight', 'normal');
+}
+
+const showSelectedMovies = (word, movies) => {
+  const selectedMovieList = d3.select('.selected-movie-list');
+  const emptyState = selectedMovieList.select('.empty-state');
+  if (word === null) {
+    selectedMovieList.html('');
+    emptyState.html('Hover over cells for more movie details');
+    selectedMovieList.append(() => emptyState.node());
+  } else {
+    emptyState.html('Titles');
+
+    // create a p tag for each movie containing this word
+    movies.forEach(d => {
+      const englishMovie = d.title.split("//")[0];
+      // bold the word, only if it isn't inside of another word
+      const boldedWordTitle = englishMovie.replace(new RegExp(`\\b(${word})\\b`, 'i'), '<strong>$1</strong>');
+      const viewsInKOrM = d.views >= 1000000 ? `${(d.views / 1000000).toFixed(1)}m` : `${(d.views / 1000).toFixed(0)}k`;
+      selectedMovieList.append('p')
+        .attr('class', 'movie-title')
+        .html(`${boldedWordTitle} <span class="views-text">${viewsInKOrM} views</span>`); // in case of multiple languages, only take english translation
+    });
+  }
+}
+
+// add word category labels and brackets on the right
+// position these just outside the right edge of the heatmap
+const categoryAxisOffset = width - 5;
 const categorySpacing = 5;
 
 // calculate levels for overlapping categories
@@ -101,25 +157,27 @@ const categoryLevels = calculateCategoryLevels(wordCategories);
 
 categoryLevels.forEach(({ category, minY, maxY, level }) => {
   const centerY = (minY + maxY) / 2;
-  const xOffset = categoryAxisOffset - (level * categorySpacing);
+  // push each overlapping level further to the right
+  const xOffset = categoryAxisOffset + (level * categorySpacing);
   
   // draw bracket
   const bracketWidth = 15;
+  // bracket opens to the right, starting at the heatmap edge and extending outward
   svg.append("path")
-    .attr("d", `M ${xOffset + bracketWidth} ${minY} 
-                L ${xOffset} ${minY} 
-                L ${xOffset} ${maxY} 
-                L ${xOffset + bracketWidth} ${maxY}`)
+    .attr("d", `M ${xOffset} ${minY} 
+                L ${xOffset + bracketWidth} ${minY} 
+                L ${xOffset + bracketWidth} ${maxY} 
+                L ${xOffset} ${maxY}`)
     .attr("stroke", colors.dark)
     .attr("stroke-width", 2)
     .attr("fill", "none");
   
   // add category label
   const text = svg.append("text")
-    .attr("x", xOffset - 10)
+    .attr("x", xOffset + bracketWidth + 10)
     .attr("y", centerY)
-    .attr("text-anchor", "end")
-    .style("font-size", "18px")
+    .attr("text-anchor", "start")
+    .style("font-size", "16px")
     .style("font-weight", "bold");
   
   // check if category name contains & or multiple words
@@ -134,13 +192,13 @@ categoryLevels.forEach(({ category, minY, maxY, level }) => {
     }
 
     text.append("tspan")
-      .attr("x", xOffset - 10)
+      .attr("x", xOffset + bracketWidth + 10)
       .attr("dy", "-0.5em")
       .text(wordParts[0]);
     
 
     text.append("tspan")
-      .attr("x", xOffset - 10)
+      .attr("x", xOffset + bracketWidth + 10)
       .attr("dy", "1.1em")
       .text(wordParts[1]);
   } else {
@@ -176,12 +234,12 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
   colorScale.domain([minValue, midValue, maxValue]);
 
   // add color legend
-  const legendWidth = 210;
+  const legendWidth = 350;
   const legendHeight = 10;
-  const legendX = width - legendWidth - 130;
-  const legendY = height + 20;
+  const legendX = width - legendWidth + 540;
+  const legendY = 0;
 
-  // Create gradient for legend
+  // create gradient for legend
   const defs = svg.append("defs");
   const linearGradient = defs.append("linearGradient")
     .attr("id", "legend-gradient");
@@ -208,18 +266,25 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
 
   // min label
   svg.append("text")
-    .attr("x", legendX)
-    .attr("y", legendY + legendHeight + 12)
+    .attr("x", legendX + legendWidth / 2 - 20)
+    .attr("y", -20)
     .attr("text-anchor", "start")
-    .style("font-size", "10px")
+    .style("font-size", "12px")
+    .text("Views");
+  // min label
+  svg.append("text")
+    .attr("x", legendX)
+    .attr("y", legendY + legendHeight + 15)
+    .attr("text-anchor", "start")
+    .style("font-size", "12px")
     .text(minValue.toLocaleString());
 
   // max label
   svg.append("text")
     .attr("x", legendX + legendWidth)
-    .attr("y", legendY + legendHeight + 12)
+    .attr("y", legendY + legendHeight + 15)
     .attr("text-anchor", "end")
-    .style("font-size", "10px")
+    .style("font-size", "12px")
     .text(maxValue.toLocaleString());
 
   // create grid background - all possible cells
@@ -235,6 +300,15 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
       .style("fill", "white")
       .style("stroke", colors.light)
       .style("stroke-width", 0.5);
+  
+    // highlight corresponding y label when hovering a grid row
+    svg.selectAll('.grid-cell')
+      .on('mouseover', function(event, d) {
+        highlightTick(d.word);
+      })
+      .on('mouseout', function() {
+        resetHighlight();
+      });
 
   // add data rectangles on top
   svg.selectAll(".data-cell")
@@ -249,12 +323,12 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
       .style("fill", function(d) { return colorScale(d.value)} )
       .on("mouseover", function(event, d) {
         tooltip.style("visibility", "visible");
-        let tooltipContent = `<strong>${d.word}</strong> (${d.length} min): ${d.value.toLocaleString()} views<br/><br/>`;
-        tooltipContent += `<strong>Movies (${d.movies.length}):</strong><br/>`;
-        d.movies.forEach(movie => {
-          tooltipContent += `• ${movie.title} (${Math.round(movie.runtime)} min): ${movie.views.toLocaleString()}<br/>`;
-        });
+        highlightTick(d.word);
+        let tooltipContent = `<strong>${d.word}</strong> (${d.length} min)<br/><br/>`;
+        tooltipContent += `${d.value.toLocaleString()} views<br/>`;
+        tooltipContent += `${d.movies.length} movie${d.movies.length !== 1 ? 's' : ''}`;
         tooltip.html(tooltipContent);
+        showSelectedMovies(d.word, d.movies);
       })
       .on("mousemove", function(event) {
         tooltip.style("top", (event.pageY - 10) + "px")
@@ -262,6 +336,8 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
       })
       .on("mouseout", function() {
         tooltip.style("visibility", "hidden");
+        resetHighlight();
+        showSelectedMovies(null);
       });
 })
 
