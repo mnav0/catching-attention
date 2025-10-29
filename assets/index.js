@@ -2,8 +2,8 @@ import { topWords, wordCategories } from './constants/words.js';
 import { colors } from './constants/colors.js';
 
 // set the dimensions and margins of the heatmap
-const margin = {top: 50, right: 640, bottom: 250, left: 100},
-  width = 1275 - margin.left - margin.right,
+const margin = {top: 50, right: 150, bottom: 250, left: 80},
+  width = 750 - margin.left - margin.right,
   height = 1700 - margin.top - margin.bottom;
 
 // column labels = runtimes (in minutes)
@@ -53,6 +53,30 @@ const yAxisG = svg.append("g")
   // set default tick text styles so we can animate to the active state
   .call(g => g.selectAll('.tick text').style('font-size', '12px').style('font-weight', 'normal'));
 
+let activeSelection = null;
+
+const setActiveSelection = (d) => {
+  if (d === null) {
+    activeSelection = null;
+    svg.selectAll('.data-cell').classed('active', false);
+    resetHighlight();
+    showSelectedMovies(null);
+    return;
+  }
+
+  activeSelection = d;
+
+  // visually mark the selected data rect
+  svg.selectAll('.data-cell').classed('active', cellD => cellD && cellD.word === d.word && cellD.length === d.length);
+  const selectedMovieList = d3.select('.selected-movie-list');
+  const emptyState = selectedMovieList.select('.empty-state');
+  selectedMovieList.html('');
+  selectedMovieList.append(() => emptyState.node());
+  emptyState.html('Titles');
+  showSelectedMovies(d.word, d.movies);
+}
+
+
 // helper to highlight a y tick (word) and reset
 const highlightTick = (word) => {
   yAxisG.selectAll('.tick')
@@ -66,12 +90,18 @@ const highlightTick = (word) => {
 }
 
 const resetHighlight = () => {
-  yAxisG.selectAll('.tick').select('text')
+  yAxisG.selectAll('.tick')
+  .filter(d => d !== activeSelection?.word)
+    .select('text')
     .transition()
     .duration(100)
     .style('font-size', '12px')
     .style('font-weight', 'normal');
 }
+
+const getViewsInKOrM = (views) => {
+  return views >= 1000000 ? `${(views / 1000000).toFixed(1)}m` : `${(views / 1000).toFixed(0)}k`;
+};
 
 const showSelectedMovies = (word, movies) => {
   const selectedMovieList = d3.select('.selected-movie-list');
@@ -86,9 +116,17 @@ const showSelectedMovies = (word, movies) => {
     // create a p tag for each movie containing this word
     movies.forEach(d => {
       const englishMovie = d.title.split("//")[0];
-      // bold the word, only if it isn't inside of another word
-      const boldedWordTitle = englishMovie.replace(new RegExp(`\\b(${word})\\b`, 'i'), '<strong>$1</strong>');
-      const viewsInKOrM = d.views >= 1000000 ? `${(d.views / 1000000).toFixed(1)}m` : `${(d.views / 1000).toFixed(0)}k`;
+      // bold the normalized word, only if it isn't inside of another word
+      const wordRegex = new RegExp(`\\b(${word})\\b`, 'i');
+      let boldedWordTitle;
+      if (wordRegex.test(englishMovie)) {
+        boldedWordTitle = englishMovie.replace(wordRegex, '<strong>$1</strong>');
+      } else {
+        const unnormalizedWord = unnormalizePlural(word);
+        const unnormalizedRegex = new RegExp(`\\b(${unnormalizedWord})\\b`, 'i');
+        boldedWordTitle = englishMovie.replace(unnormalizedRegex, '<strong>$1</strong>');
+      }
+      const viewsInKOrM = getViewsInKOrM(d.views);
       selectedMovieList.append('p')
         .attr('class', 'movie-title')
         .html(`${boldedWordTitle} <span class="views-text">${viewsInKOrM} views</span>`); // in case of multiple languages, only take english translation
@@ -236,11 +274,16 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
   // add color legend
   const legendWidth = 350;
   const legendHeight = 10;
-  const legendX = width - legendWidth + 540;
-  const legendY = 0;
+  const legendX = 0;
+  const legendY = 50;
+
+  const legend = d3.select('#legend').append("svg");
+
+  legend.attr("width", legendWidth)
+    .attr("height", legendHeight + 75);
 
   // create gradient for legend
-  const defs = svg.append("defs");
+  const defs = legend.append("defs");
   const linearGradient = defs.append("linearGradient")
     .attr("id", "legend-gradient");
 
@@ -257,7 +300,7 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     .attr("stop-color", colorScale(maxValue));
 
   // draw legend rectangle
-  svg.append("rect")
+  legend.append("rect")
     .attr("x", legendX)
     .attr("y", legendY)
     .attr("width", legendWidth)
@@ -265,27 +308,28 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     .style("fill", "url(#legend-gradient)");
 
   // min label
-  svg.append("text")
-    .attr("x", legendX + legendWidth / 2 - 20)
-    .attr("y", -20)
+  legend.append("text")
+    .attr("x", legendX + 80)
+    .attr("y", legendY - 25)
     .attr("text-anchor", "start")
     .style("font-size", "12px")
-    .text("Views");
+    .text("Views in thousands (k) / millions (m)");
+
   // min label
-  svg.append("text")
+  legend.append("text")
     .attr("x", legendX)
     .attr("y", legendY + legendHeight + 15)
     .attr("text-anchor", "start")
     .style("font-size", "12px")
-    .text(minValue.toLocaleString());
+    .text(getViewsInKOrM(minValue));
 
   // max label
-  svg.append("text")
-    .attr("x", legendX + legendWidth)
+  legend.append("text")
+    .attr("x", legendWidth)
     .attr("y", legendY + legendHeight + 15)
     .attr("text-anchor", "end")
     .style("font-size", "12px")
-    .text(maxValue.toLocaleString());
+    .text(getViewsInKOrM(maxValue));
 
   // create grid background - all possible cells
   svg.selectAll(".grid-cell")
@@ -304,9 +348,17 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     // highlight corresponding y label when hovering a grid row
     svg.selectAll('.grid-cell')
       .on('mouseover', function(event, d) {
-        highlightTick(d.word);
+        // if (!activeSelection) {
+          highlightTick(d.word);
+        // }
       })
       .on('mouseout', function() {
+        // if (!activeSelection) {
+          resetHighlight();
+        // }
+      })
+      .on('click', function(event, d) {
+        setActiveSelection(null);
         resetHighlight();
       });
 
@@ -323,12 +375,16 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
       .style("fill", function(d) { return colorScale(d.value)} )
       .on("mouseover", function(event, d) {
         tooltip.style("visibility", "visible");
-        highlightTick(d.word);
         let tooltipContent = `<strong>${d.word}</strong> (${d.length} min)<br/><br/>`;
         tooltipContent += `${d.value.toLocaleString()} views<br/>`;
         tooltipContent += `${d.movies.length} movie${d.movies.length !== 1 ? 's' : ''}`;
         tooltip.html(tooltipContent);
-        showSelectedMovies(d.word, d.movies);
+
+        highlightTick(d.word);
+
+        if (!activeSelection) {
+          showSelectedMovies(d.word, d.movies);
+        }
       })
       .on("mousemove", function(event) {
         tooltip.style("top", (event.pageY - 10) + "px")
@@ -336,9 +392,23 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
       })
       .on("mouseout", function() {
         tooltip.style("visibility", "hidden");
+
         resetHighlight();
-        showSelectedMovies(null);
-      });
+
+        if (!activeSelection) {
+          showSelectedMovies(null);
+        }
+      })
+      .on('click', function(event, d) {
+        // prevent document click listener from clearing immediately
+        event.stopPropagation();
+        // toggle selection: clicking same cell clears, otherwise set
+        if (activeSelection && activeSelection.word === d.word && activeSelection.length === d.length) {
+          setActiveSelection(null);
+        } else {
+          setActiveSelection(d);
+        }
+      })
 })
 
 // normalize words to their singular form
@@ -352,6 +422,10 @@ const normalizePlural = (word) => {
   if (word == 'women') {
     normalizedWord = 'woman';
   }
+
+  if (word == 'lives') {
+    normalizedWord = 'life';
+  }
   
   if (word.endsWith('s') && word.length > 2 && !['christmas', 'its', 'lasts', 'miss'].includes(word)) {
     normalizedWord = word.slice(0, -1);
@@ -359,6 +433,21 @@ const normalizePlural = (word) => {
   
   return normalizedWord;
 };
+
+const unnormalizePlural = (word) => {
+  if (word == 'man') {
+    return 'men';
+  }
+  if (word == 'woman') {
+    return 'women';
+  }
+
+  if (word == 'life') {
+    return 'lives';
+  }
+
+  return word + 's';
+}
 
 // get movie length in mins
 const getMovieLengthInMinutes = (runtime) => {
