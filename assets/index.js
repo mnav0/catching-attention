@@ -6,6 +6,14 @@ const margin = {top: 50, right: 150, bottom: 250, left: 80},
   width = 750 - margin.left - margin.right,
   height = 1700 - margin.top - margin.bottom;
 
+// color legend constants
+const legendWidth = 350;
+const legendHeight = 10;
+const legendX = 0;
+const legendY = 50;
+
+let minViews, maxViews;
+
 // column labels = runtimes (in minutes)
 const runtimes = d3.range(20, 200, 10);
 
@@ -55,12 +63,34 @@ const yAxisG = svg.append("g")
 
 let activeSelection = null;
 
+// helper to update legend tick position
+const updateLegendTick = (value) => {
+  const legendTick = d3.select('.legend-tick');
+  if (value === null || value === undefined) {
+    legendTick.transition().duration(200).style("opacity", 0);
+    return;
+  }
+  
+  const scale = d3.scaleLinear()
+    .domain([minViews, maxViews])
+    .range([legendX, legendX + legendWidth]);
+  
+  const xPos = scale(value);
+  legendTick
+    .attr("transform", `translate(${xPos}, 0)`)
+    .transition()
+    .duration(200)
+    .style("opacity", 1);
+};
+
 const setActiveSelection = (d) => {
   if (d === null) {
     activeSelection = null;
     svg.selectAll('.data-cell').classed('active', false);
+    svg.selectAll('.data-cell').classed('inactive', false);
     resetHighlight();
     showSelectedMovies(null);
+    updateLegendTick(null); // hide tick when clearing selection
     return;
   }
 
@@ -68,12 +98,14 @@ const setActiveSelection = (d) => {
 
   // visually mark the selected data rect
   svg.selectAll('.data-cell').classed('active', cellD => cellD && cellD.word === d.word && cellD.length === d.length);
+  svg.selectAll('.data-cell').classed('inactive', cellD => cellD && !(cellD.word === d.word && cellD.length === d.length));
   const selectedMovieList = d3.select('.selected-movie-list');
   const emptyState = selectedMovieList.select('.empty-state');
   selectedMovieList.html('');
   selectedMovieList.append(() => emptyState.node());
   emptyState.html('Titles');
   showSelectedMovies(d.word, d.movies);
+  updateLegendTick(d.value); // show tick at cell's value position
 }
 
 
@@ -266,16 +298,10 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
   const processedData = processData(data);
 
   // update color scale domain based on actual data
-  const minValue = d3.min(processedData, d => d.value);
-  const maxValue = d3.max(processedData, d => d.value);
-  const midValue = (minValue + maxValue) / 2;
-  colorScale.domain([minValue, midValue, maxValue]);
-
-  // add color legend
-  const legendWidth = 350;
-  const legendHeight = 10;
-  const legendX = 0;
-  const legendY = 50;
+  minViews = d3.min(processedData, d => d.value);
+  maxViews = d3.max(processedData, d => d.value);
+  const midViews = (minViews + maxViews) / 2;
+  colorScale.domain([minViews, midViews, maxViews]);
 
   const legend = d3.select('#legend').append("svg");
 
@@ -289,15 +315,15 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
 
   linearGradient.append("stop")
     .attr("offset", "0%")
-    .attr("stop-color", colorScale(minValue));
+    .attr("stop-color", colorScale(minViews));
 
   linearGradient.append("stop")
     .attr("offset", "50%")
-    .attr("stop-color", colorScale(midValue));
+    .attr("stop-color", colorScale(midViews));
 
   linearGradient.append("stop")
     .attr("offset", "100%")
-    .attr("stop-color", colorScale(maxValue));
+    .attr("stop-color", colorScale(maxViews));
 
   // draw legend rectangle
   legend.append("rect")
@@ -309,11 +335,11 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
 
   // min label
   legend.append("text")
-    .attr("x", legendX + 80)
+    .attr("x", legendX + legendWidth / 2)
     .attr("y", legendY - 25)
-    .attr("text-anchor", "start")
+    .attr("text-anchor", "middle")
     .style("font-size", "12px")
-    .text("Views in thousands (k) / millions (m)");
+    .text("Views");
 
   // min label
   legend.append("text")
@@ -321,7 +347,7 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     .attr("y", legendY + legendHeight + 15)
     .attr("text-anchor", "start")
     .style("font-size", "12px")
-    .text(getViewsInKOrM(minValue));
+    .text(minViews.toLocaleString());
 
   // max label
   legend.append("text")
@@ -329,7 +355,20 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     .attr("y", legendY + legendHeight + 15)
     .attr("text-anchor", "end")
     .style("font-size", "12px")
-    .text(getViewsInKOrM(maxValue));
+    .text(maxViews.toLocaleString());
+
+  // add tick indicator (initially hidden)
+  const legendTick = legend.append("g")
+    .attr("class", "legend-tick")
+    .style("opacity", 0);
+
+  legendTick.append("line")
+    .attr("x1", 0)
+    .attr("x2", 0)
+    .attr("y1", legendY - 3)
+    .attr("y2", legendY + legendHeight + 3)
+    .attr("stroke", colors.dark)
+    .attr("stroke-width", 1.5);
 
   // create grid background - all possible cells
   svg.selectAll(".grid-cell")
@@ -348,14 +387,10 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     // highlight corresponding y label when hovering a grid row
     svg.selectAll('.grid-cell')
       .on('mouseover', function(event, d) {
-        // if (!activeSelection) {
-          highlightTick(d.word);
-        // }
+        highlightTick(d.word);
       })
       .on('mouseout', function() {
-        // if (!activeSelection) {
-          resetHighlight();
-        // }
+        resetHighlight();
       })
       .on('click', function(event, d) {
         setActiveSelection(null);
@@ -384,6 +419,8 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
 
         if (!activeSelection) {
           showSelectedMovies(d.word, d.movies);
+          updateLegendTick(d.value); // show tick on hover
+          svg.selectAll('.data-cell').classed('inactive', false); // clear inactive filtering
         }
       })
       .on("mousemove", function(event) {
@@ -397,6 +434,8 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
 
         if (!activeSelection) {
           showSelectedMovies(null);
+          updateLegendTick(null); // hide tick on mouseout if no active selection
+          svg.selectAll('.data-cell').classed('inactive', false); // clear inactive class
         }
       })
       .on('click', function(event, d) {

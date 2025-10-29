@@ -4,6 +4,10 @@ body {
   font-family: "Nunito Sans", sans-serif;
 }
 
+h1 {
+  font-size: 18px;
+}
+
 text {
   font-family: "Nunito Sans", sans-serif;
   fill: #1f1d1d;
@@ -72,6 +76,10 @@ a {
 }
 
 .active {
-  stroke: #1f1d1d;
+  stroke: #B20710;
   stroke-width: 1.5;
+}
+
+.inactive {
+  opacity: 0.3;
 }
