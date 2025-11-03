@@ -80,6 +80,16 @@ a {
   stroke-width: 1.5;
 }
 
+.legend-active {
+  stroke: #B20710;
+  stroke-width: 0.75;
+}
+
 .inactive {
   opacity: 0.3;
+}
+
+.subtext {
+  font-size: 12px;
+  font-style: italic;
 }

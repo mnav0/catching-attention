@@ -370,6 +370,102 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
     .attr("stroke", colors.dark)
     .attr("stroke-width", 1.5);
 
+  // helper to filter cells based on value range and show matching movies
+  const filterCellsByValue = (hoverValue, tolerance = (maxViews - minViews) * 0.05) => {
+    if (hoverValue === null) {
+      svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false);
+      showSelectedMovies(null);
+      return;
+    }
+
+    // collect all movies from cells in the value range
+    const matchingMovies = [];
+    
+    svg.selectAll('.data-cell').each(function(d) {
+      if (!d) return;
+      const isInRange = Math.abs(d.value - hoverValue) <= tolerance;
+      d3.select(this)
+        .classed('legend-active', isInRange)
+        .classed('inactive', !isInRange);
+      
+      // collect ALL movies from active cells (don't filter individual movie.views)
+      if (isInRange && d.movies) {
+        d.movies.forEach(movie => {
+          const isMovieInRange = Math.abs(movie.views - hoverValue) <= tolerance;
+          if (isMovieInRange) {
+            matchingMovies.push({ ...movie, word: d.word });
+          }
+        });
+      }
+    });
+
+    // show the filtered movies
+    if (matchingMovies.length > 0) {
+      // sort by views descending
+      matchingMovies.sort((a, b) => b.views - a.views);
+      // dedupe by title
+      const uniqueMovies = Array.from(
+        new Map(matchingMovies.map(m => [m.title.trim().toLowerCase(), m])).values()
+      );
+      
+      // display in aside
+      const selectedMovieList = d3.select('.selected-movie-list');
+      selectedMovieList.html('');
+      
+      selectedMovieList.append('p')
+        .attr('class', 'empty-state')
+        .text(`Titles`);
+      
+      uniqueMovies.slice(0, 20).forEach(movie => {
+        const englishMovie = movie.title.split("//")[0];
+        const viewsInKOrM = getViewsInKOrM(movie.views);
+        selectedMovieList.append('p')
+          .attr('class', 'movie-title')
+          .html(`${englishMovie} <span class="views-text">${viewsInKOrM} views</span>`);
+      });
+      
+      if (uniqueMovies.length > 20) {
+        selectedMovieList.append('p')
+          .attr('class', 'empty-state')
+          .style('font-style', 'italic')
+          .text(`...and ${uniqueMovies.length - 20} more`);
+      }
+    } else {
+      showSelectedMovies(null);
+    }
+  };
+
+  // add interactive overlay to legend for hover detection
+  const legendInteractive = legend.append("rect")
+    .attr("x", legendX)
+    .attr("y", legendY - 10)
+    .attr("width", legendWidth)
+    .attr("height", legendHeight + 20)
+    .style("fill", "transparent")
+    .style("cursor", "crosshair")
+    .on('mousemove', function(event) {
+      if (activeSelection) return; // don't interfere with active selection
+      
+      const [mouseX] = d3.pointer(event, legend.node());
+      
+      // clamp to legend bounds
+      if (mouseX < legendX || mouseX > legendX + legendWidth) return;
+      
+      const scale = d3.scaleLinear()
+        .domain([legendX, legendX + legendWidth])
+        .range([minViews, maxViews]);
+      
+      const hoverValue = scale(mouseX);
+      updateLegendTick(hoverValue);
+      filterCellsByValue(hoverValue);
+    })
+    .on('mouseout', function() {
+      if (activeSelection) return;
+      
+      updateLegendTick(null);
+      filterCellsByValue(null);
+    });
+
   // create grid background - all possible cells
   svg.selectAll(".grid-cell")
       .data(runtimes.flatMap(length => topWords.map(word => ({ length, word }))))
@@ -420,7 +516,7 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
         if (!activeSelection) {
           showSelectedMovies(d.word, d.movies);
           updateLegendTick(d.value); // show tick on hover
-          svg.selectAll('.data-cell').classed('inactive', false); // clear inactive filtering
+          svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false); // clear filtering
         }
       })
       .on("mousemove", function(event) {
@@ -435,7 +531,7 @@ d3.csv("assets/data/Movies-Table.csv").then(data => {
         if (!activeSelection) {
           showSelectedMovies(null);
           updateLegendTick(null); // hide tick on mouseout if no active selection
-          svg.selectAll('.data-cell').classed('inactive', false); // clear inactive class
+          svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false); // clear classes
         }
       })
       .on('click', function(event, d) {
