@@ -180,6 +180,20 @@ function updateSentimentBar(movieData) {
   }
 }
 
+// Helper to convert normalized words back to plural form for highlighting
+const unnormalizePlural = (word) => {
+  if (word == 'man') {
+    return 'men';
+  }
+  if (word == 'woman') {
+    return 'women';
+  }
+  if (word == 'life') {
+    return 'lives';
+  }
+  return word + 's';
+};
+
 const showSelectedMovies = (word, movies, hoverValue) => {
   const selectedMovieList = d3.select('.selected-movie-list');
   const emptyState = selectedMovieList.select('.empty-state');
@@ -434,21 +448,6 @@ const normalizePlural = (word) => {
   
   return normalizedWord;
 };
-
-const unnormalizePlural = (word) => {
-  if (word == 'man') {
-    return 'men';
-  }
-  if (word == 'woman') {
-    return 'women';
-  }
-
-  if (word == 'life') {
-    return 'lives';
-  }
-
-  return word + 's';
-}
 
 // get movie length in mins
 const getMovieLengthInMinutes = (runtime) => {
