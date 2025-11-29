@@ -747,7 +747,7 @@ const loadData = async () => {
     .attr("y1", legendY - 3)
     .attr("y2", legendY + legendHeight + 3)
     .attr("stroke", colors.dark)
-    .attr("stroke-width", 1.5);
+    .attr("stroke-width", 1);
 
   // helper to filter cells based on value range and show matching movies
   const filterCellsByValue = (hoverValue, tolerance = (maxViews - minViews) * 0.05) => {
@@ -789,7 +789,7 @@ const loadData = async () => {
       
       // Use showSelectedMovies helper (pass null for word since we don't highlight a specific word)
       showSelectedMovies(null, uniqueMovies, hoverValue);
-      updateTooltip(); // Update tooltip after showing movies
+      // Don't update tooltip when hovering legend - tooltip should only show for cell hovers and description clicks
     } else {
       showSelectedMovies(null);
     }
