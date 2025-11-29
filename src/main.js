@@ -1,3 +1,5 @@
+import * as d3 from "d3";
+import moviesCSV from './data/NetflixMovies_added.csv';
 import { topWords, wordCategories } from './constants/words.js';
 import { colors } from './constants/colors.js';
 import { enrichMoviesArray } from './tmdb-api.js';
@@ -243,8 +245,157 @@ const tooltip = d3.select("body")
 // Show loading indicator
 d3.select('.selected-movie-list').html('<p class="empty-state">Loading data...</p>');
 
-// read movie data
-d3.csv("assets/data/NetflixMovies_added.csv").then(async data => {
+// normalize words to their singular form
+const normalizePlural = (word) => {
+  let normalizedWord = word;
+
+  if (word == 'men') {
+    normalizedWord = 'man';
+  }
+
+  if (word == 'women') {
+    normalizedWord = 'woman';
+  }
+
+  if (word == 'lives') {
+    normalizedWord = 'life';
+  }
+  
+  if (word.endsWith('s') && word.length > 2 && !['christmas', 'its', 'lasts', 'miss'].includes(word)) {
+    normalizedWord = word.slice(0, -1);
+  }
+  
+  return normalizedWord;
+};
+
+const unnormalizePlural = (word) => {
+  if (word == 'man') {
+    return 'men';
+  }
+  if (word == 'woman') {
+    return 'women';
+  }
+
+  if (word == 'life') {
+    return 'lives';
+  }
+
+  return word + 's';
+}
+
+// get movie length in mins
+const getMovieLengthInMinutes = (runtime) => {
+  const numbers = runtime.split(":");
+  const hours = parseInt(numbers[0]);
+  const minutes = parseInt(numbers[1]);
+  const totalMinutes = (hours * 60) + minutes;
+  return totalMinutes;
+}
+
+// Helper: Extract and clean words from a title
+const extractWordsFromTitle = (title) => {
+  const englishWords = (title || "").split("//")[0]; // in case of multiple languages, only take english translation
+  return englishWords
+    .split(" ")
+    .map(w => w.toLowerCase().replace(/[^a-zA-Z]/g, ''))
+    .filter(w => w.length > 0);
+}
+
+// Helper: Get normalized topWords from a title
+const getTopWordsFromTitle = (title) => {
+  const words = extractWordsFromTitle(title);
+  
+  // Only process movies with 5 or fewer words
+  if (!words.length || words.length > 5) return [];
+
+  // Return normalized words that are in topWords
+  return words
+    .map(word => normalizePlural(word))
+    .filter(normalized => topWords.includes(normalized));
+}
+
+// Filter movies that contain any topWords (before enrichment to save API calls)
+const filterMoviesWithTopWords = (data) => {
+  return data.filter(row => {
+    return getTopWordsFromTitle(row["Title"]).length > 0;
+  });
+}
+
+// process the data based on the titles, runtime, and views into tuples 
+// (word in title, runtime in mins rounded to 10, views)
+// Expects enriched movie data with TMDB fields already attached
+const processData = (data) => {
+  // flatten rows into individual (length, word, views, title) items for words in topWords
+  const items = data.flatMap(row => {
+    const topWordsInTitle = getTopWordsFromTitle(row["Title"]);
+
+    // Skip if no topWords found (already filtered, but just in case)
+    if (topWordsInTitle.length === 0) return [];
+
+    const runtime = getMovieLengthInMinutes(row["Runtime"]);
+    const roundedRuntime = Math.round(runtime / 10) * 10;
+    // remove commas from the Views string before parsing
+    const views = parseInt(row["Views"].replace(/,/g, ''));
+    const title = row["Title"];
+    const tconst = row["tconst"];
+    
+    // Keep TMDB data from enriched row
+    const productionCountries = row.productionCountries || [];
+    const description = row.description || '';
+    const poster = row.poster || '';
+
+    // Create an item for each topWord found in the title
+    return topWordsInTitle.map(normalized => ({ 
+      length: roundedRuntime, 
+      word: normalized, 
+      views, 
+      title, 
+      runtime, 
+      tconst,
+      productionCountries,
+      description,
+      poster,
+    }));
+  });
+
+  // roll up by length and word to get average of views 
+  // keep individual movie details with TMDB data
+  const rolled = d3.rollup(
+    items,
+    v => ({
+      value: Math.round(d3.mean(v, d => d.views)),
+      movies: v.map(d => ({ 
+        title: d.title, 
+        views: d.views, 
+        runtime: d.runtime, 
+        id: d.tconst,
+        productionCountries: d.productionCountries,
+        description: d.description,
+        poster: d.poster
+      }))
+    }),
+    d => d.length,
+    d => d.word
+  );
+
+  console.log(rolled)
+
+  // convert the nested rollup into the expected array of objects
+  const result = Array.from(rolled, ([length, varMap]) => {
+    return Array.from(varMap, ([word, aggregated]) => ({
+      length,
+      word,
+      value: aggregated.value,
+      movies: aggregated.movies
+    }));
+  }).flat();
+  
+  return result;
+}
+
+const loadData = async () => {
+  const data = await moviesCSV;
+
   // Step 1: Filter movies that contain topWords (before enrichment)
   const filteredMovies = filterMoviesWithTopWords(data);
   console.log(`Filtered to ${filteredMovies.length} movies (from ${data.length} total) containing topWords`);
@@ -597,152 +748,6 @@ d3.csv("assets/data/NetflixMovies_added.csv").then(async data => {
           setActiveSelection(d);
         }
       })
-})
+} 
 
-// normalize words to their singular form
-const normalizePlural = (word) => {
-  let normalizedWord = word;
-
-  if (word == 'men') {
-    normalizedWord = 'man';
-  }
-
-  if (word == 'women') {
-    normalizedWord = 'woman';
-  }
-
-  if (word == 'lives') {
-    normalizedWord = 'life';
-  }
-  
-  if (word.endsWith('s') && word.length > 2 && !['christmas', 'its', 'lasts', 'miss'].includes(word)) {
-    normalizedWord = word.slice(0, -1);
-  }
-  
-  return normalizedWord;
-};
-
-const unnormalizePlural = (word) => {
-  if (word == 'man') {
-    return 'men';
-  }
-  if (word == 'woman') {
-    return 'women';
-  }
-
-  if (word == 'life') {
-    return 'lives';
-  }
-
-  return word + 's';
-}
-
-// get movie length in mins
-const getMovieLengthInMinutes = (runtime) => {
-  const numbers = runtime.split(":");
-  const hours = parseInt(numbers[0]);
-  const minutes = parseInt(numbers[1]);
-  const totalMinutes = (hours * 60) + minutes;
-  return totalMinutes;
-}
-
-// Helper: Extract and clean words from a title
-const extractWordsFromTitle = (title) => {
-  const englishWords = (title || "").split("//")[0]; // in case of multiple languages, only take english translation
-  return englishWords
-    .split(" ")
-    .map(w => w.toLowerCase().replace(/[^a-zA-Z]/g, ''))
-    .filter(w => w.length > 0);
-}
-
-// Helper: Get normalized topWords from a title
-const getTopWordsFromTitle = (title) => {
-  const words = extractWordsFromTitle(title);
-  
-  // Only process movies with 5 or fewer words
-  if (!words.length || words.length > 5) return [];
-
-  // Return normalized words that are in topWords
-  return words
-    .map(word => normalizePlural(word))
-    .filter(normalized => topWords.includes(normalized));
-}
-
-// Filter movies that contain any topWords (before enrichment to save API calls)
-const filterMoviesWithTopWords = (data) => {
-  return data.filter(row => {
-    return getTopWordsFromTitle(row["Title"]).length > 0;
-  });
-}
-
-// process the data based on the titles, runtime, and views into tuples 
-// (word in title, runtime in mins rounded to 10, views)
-// Expects enriched movie data with TMDB fields already attached
-const processData = (data) => {
-  // flatten rows into individual (length, word, views, title) items for words in topWords
-  const items = data.flatMap(row => {
-    const topWordsInTitle = getTopWordsFromTitle(row["Title"]);
-
-    // Skip if no topWords found (already filtered, but just in case)
-    if (topWordsInTitle.length === 0) return [];
-
-    const runtime = getMovieLengthInMinutes(row["Runtime"]);
-    const roundedRuntime = Math.round(runtime / 10) * 10;
-    // remove commas from the Views string before parsing
-    const views = parseInt(row["Views"].replace(/,/g, ''));
-    const title = row["Title"];
-    const tconst = row["tconst"];
-    
-    // Keep TMDB data from enriched row
-    const productionCountries = row.productionCountries || [];
-    const description = row.description || '';
-    const poster = row.poster || '';
-
-    // Create an item for each topWord found in the title
-    return topWordsInTitle.map(normalized => ({ 
-      length: roundedRuntime, 
-      word: normalized, 
-      views, 
-      title, 
-      runtime, 
-      tconst,
-      productionCountries,
-      description,
-      poster,
-    }));
-  });
-
-  // roll up by length and word to get average of views 
-  // keep individual movie details with TMDB data
-  const rolled = d3.rollup(
-    items,
-    v => ({
-      value: Math.round(d3.mean(v, d => d.views)),
-      movies: v.map(d => ({ 
-        title: d.title, 
-        views: d.views, 
-        runtime: d.runtime, 
-        id: d.tconst,
-        productionCountries: d.productionCountries,
-        description: d.description,
-        poster: d.poster
-      }))
-    }),
-    d => d.length,
-    d => d.word
-  );
-
-  console.log(rolled)
-
-  // convert the nested rollup into the expected array of objects
-  const result = Array.from(rolled, ([length, varMap]) => {
-    return Array.from(varMap, ([word, aggregated]) => ({
-      length,
-      word,
-      value: aggregated.value,
-      movies: aggregated.movies
-    }));
-  }).flat();
-  
-  return result;
-}
+loadData();

@@ -1,5 +1,5 @@
 // Simple TMDB API fetcher
-const TMDB_TOKEN = "";
+const TMDB_TOKEN = import.meta.env.VITE_TMDB_API_KEY;
 
 const tmdbCache = new Map();
 
@@ -7,6 +7,7 @@ export async function fetchTMDBData(imdbId) {
     if (tmdbCache.has(imdbId)) {
         return tmdbCache.get(imdbId);
     }
+
 
     const findUrl = `https://api.themoviedb.org/3/find/${imdbId}?external_source=imdb_id`;
     const options = {
