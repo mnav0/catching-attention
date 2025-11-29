@@ -6,7 +6,7 @@ var movieLengths = {};
 const additives = ['the', 'and', 'of', 'or', 'la', 'el', 'a', 'in', 'to', 'for', 'with', 'de', 'tamil', 'on', 'ii', 'at', 'hindi', 'is', 'after', 'from', 'telugu', 'up', 'girls', 'boys', 'days', 'men'];
 
 // for movies - people usually click once and watch
-d3.csv("assets/data/Movies-Table.csv").then(data => {
+d3.csv("assets/data/NetflixMovies_added.csv").then(data => {
   const sortedData = data.sort((a, b) => b["Views"] - a["Views"]);
   const movieLengths = {};
 

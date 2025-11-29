@@ -1,6 +1,6 @@
 body {
   color: #1f1d1d;
-  background-color: #F4F3EF;
+  background-color: white;
   font-family: "Nunito Sans", sans-serif;
 }
 
@@ -16,6 +16,9 @@ text {
 .container {
   text-align: center;
   margin: 2em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .text {
@@ -27,27 +30,85 @@ a {
   color: #1f1d1d;
 }
 
+.vis-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 2em;
+  margin-top: 2em;
+}
+
+.vis-main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.vis-container {
+  width: 750px;
+}
+
+.aside {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+  width: 350px;
+  z-index: 1000;
+  align-self: flex-start;
+}
+
 .selected-movie-list {
   background-color: white;
-  width: 319px;
   border: 1px solid #1f1d1d33;
   padding: 0.5em 1em;
+  max-height: 70vh;
+  overflow-y: scroll;
 }
 
 .empty-state {
   font-size: 12px;
-  font-style: italic;
+}
+
+.empty-state span {
+  font-style: italic; 
+}
+
+.toggle-icon {
+  margin-top: 1.25em;
 }
 
 .movie-title {
   font-size: 18px;
-  border-bottom: 1px solid #e1e0db;
-  padding-bottom: 1em;
+  flex: 0.9;
+  text-align: left;
 }
 
-.movie-title:last-child {
+.description {
+  margin-top: 0;
+  font-size: 12px;
+  display: none;
+  padding: 0 1em;
+}
+
+.show {
+  display: block;
+}
+
+.movie-title-container {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 1em;
+}
+
+.movie-details {
+  border-bottom: 1px solid #e1e0db;
+}
+
+.movie-details:last-child {
   border-bottom: none;
-  padding-bottom: 0;
 }
 
 .views-text {
@@ -55,33 +116,13 @@ a {
   font-size: 12px;
 }
 
-.vis-container {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 10.5em;
-
-  @media screen and (max-width: 1400px) {
-    gap: 3em;
-  }
-}
-
-.aside {
-  position: sticky;
-  top: 1em;
-  align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .active {
-  stroke: #B20710;
+  stroke: #b20710;
   stroke-width: 1.5;
 }
 
 .legend-active {
-  stroke: #B20710;
+  stroke: #b20710;
   stroke-width: 0.75;
 }
 
@@ -92,4 +133,43 @@ a {
 .subtext {
   font-size: 12px;
   font-style: italic;
+}
+
+.tooltip {
+  position: absolute;
+  visibility: hidden;
+  opacity: 0;
+  background-color: #f4f3ef;
+  border: 1px solid #d3d3d3;
+  border-radius: 5px;
+  padding: 0;
+  overflow: hidden;
+  z-index: 1000;
+  width: 200px;
+  height: 300px;
+  transition: opacity 0.5s linear;
+}
+
+.loading-tooltip {
+  background-color: white;
+  opacity: 1;
+  width: 200px;
+  height: 300px;
+  
+  z-index: 1001;
+  transition: opacity 0.5s linear;
+}
+
+.hide-loading {
+  opacity: 0;
+  transition: opacity 0.5s linear;
+}
+
+.tooltip img {
+  width: 100%;
+  z-index: 1000;
+  height: auto;
+  display: block;
+  position: absolute;
+  top: 0;
 }
