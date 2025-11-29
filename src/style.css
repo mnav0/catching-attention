@@ -1,10 +1,11 @@
 body {
-  color: #16161D;
+  color: #16161d;
   background-color: white;
   font-family: "Nunito Sans", sans-serif;
 }
 
-h1, h4 {
+h1,
+h4 {
   font-family: "Cormorant Garamond", serif;
   font-weight: 400;
 }
@@ -15,7 +16,7 @@ h1 {
 
 text {
   font-family: "Nunito Sans", sans-serif;
-  fill: #16161D;
+  fill: #16161d;
 }
 
 .container {
@@ -33,7 +34,7 @@ text {
 }
 
 a {
-  color: #16161D;
+  color: #16161d;
 }
 
 .vis-wrapper {
@@ -67,7 +68,7 @@ a {
 
 .selected-movie-list {
   background-color: white;
-  border: 1px solid #16161D33;
+  border: 1px solid #16161d33;
   padding: 0.5em 1em;
   max-height: 70vh;
   overflow-y: scroll;
@@ -78,7 +79,7 @@ a {
 }
 
 .empty-state span {
-  font-style: italic; 
+  font-style: italic;
 }
 
 .toggle-icon {
@@ -103,7 +104,7 @@ a {
   display: none;
   padding: 1em;
   text-align: left;
-  border-top: 1px solid #F4F3EF;
+  border-top: 1px solid #f4f3ef;
 }
 
 .description p {
@@ -122,7 +123,7 @@ a {
 }
 
 .movie-details {
-  border-bottom: 1px solid #F4F3EF;
+  border-bottom: 1px solid #f4f3ef;
 }
 
 .movie-details:last-child {
@@ -136,12 +137,12 @@ a {
 }
 
 .active {
-  stroke: #16161D;
+  stroke: #16161d;
   stroke-width: 1.5;
 }
 
 .legend-active {
-  stroke: #16161D;
+  stroke: #16161d;
   stroke-width: 0.75;
 }
 
@@ -159,7 +160,7 @@ a {
   visibility: hidden;
   opacity: 0;
   background-color: white;
-  border: 1px solid #F4F3EF;
+  border: 1px solid #f4f3ef;
   border-radius: 5px;
   padding: 0;
   overflow: hidden;
@@ -174,7 +175,6 @@ a {
   opacity: 1;
   width: 200px;
   height: 300px;
-  
   z-index: 1001;
   transition: opacity 0.5s linear;
 }
@@ -195,4 +195,39 @@ a {
 
 .sentiment {
   font-style: italic;
+}
+
+.sentiment-label {
+  font-size: 12px;
+  text-align: center;
+  margin: 0 0 0.5em 0;
+  min-height: 1.2em;
+}
+
+.sentiment-bar {
+  width: 350px;
+  height: 12px;
+  background-color: white;
+  border: 1px solid #16161d33;
+  position: relative;
+  overflow: hidden;
+}
+
+.sentiment-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transition: left 0.5s ease-in-out, width 0.5s ease-in-out, background-color 0.5s ease-in-out;
+  width: 0;
+}
+
+.sentiment-divider {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background-color: #6C6A4F;
+  transform: translateX(-50%);
+  z-index: 1;
 }

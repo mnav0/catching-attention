@@ -19,6 +19,9 @@ const legendY = 50;
 
 let minViews, maxViews, minSentiment, maxSentiment;
 let activeSelection = null;
+let openDescriptions = []; // Track IDs of movies with open descriptions
+let currentMovies = []; // Store current movies being displayed
+let currentTooltipMovieId = null; // Track which movie is currently displayed in tooltip
 
 // column labels = runtimes (in minutes)
 const runtimes = d3.range(20, 200, 10);
@@ -59,6 +62,7 @@ const setActiveSelection = (d) => {
     tooltip.style("opacity", 0);
 
     tooltip.html(''); // clear tooltip content
+    currentTooltipMovieId = null; // reset tooltip tracking
     return;
   }
 
@@ -73,6 +77,7 @@ const setActiveSelection = (d) => {
   selectedMovieList.append(() => emptyState.node());
   emptyState.html('Titles');
   showSelectedMovies(d.word, d.movies, d.value);
+  updateTooltip(); // Update tooltip when new cell is selected
   updateLegendTick(d.value); // show tick at cell's value position
 }
 
@@ -122,6 +127,59 @@ function getSentimentValue(score) {
   return Math.round(sentimentValue * 100);
 }
 
+// Helper to calculate average sentiment from an array of movies
+const calculateAverageSentiment = (movies) => {
+  if (!movies || movies.length === 0) return null;
+  
+  const moviesWithSentiment = movies.filter(m => m.sentiment !== undefined && m.sentiment !== null);
+  if (moviesWithSentiment.length === 0) return null;
+  
+  const avgSentiment = d3.mean(moviesWithSentiment, m => m.sentiment);
+  return { sentiment: avgSentiment };
+};
+
+// Update sentiment bar based on movie data
+function updateSentimentBar(movieData) {
+  const sentimentFill = d3.select('.sentiment-fill');
+  const sentimentLabel = d3.select('#sentiment-label');
+  
+  if (!movieData || movieData.sentiment === undefined || movieData.sentiment === null) {
+    // Reset to neutral state
+    sentimentFill
+      .style('width', '0%')
+      .style('left', '50%')
+      .style('background-color', 'transparent');
+    sentimentLabel.text('');
+    return;
+  }
+
+  const sentimentPercentage = getSentimentValue(movieData.sentiment);
+  
+  if (sentimentPercentage === 0) {
+    // Neutral - no fill
+    sentimentFill
+      .style('width', '0%')
+      .style('left', '50%')
+      .style('background-color', 'transparent');
+    sentimentLabel.text('Neutral');
+  } else if (sentimentPercentage > 0) {
+    // Positive - fill to the right
+    sentimentFill
+      .style('left', '50%')
+      .style('width', `${sentimentPercentage / 2}%`) // divide by 2 because it's only half the bar
+      .style('background-color', colors.sentimentPositive);
+    sentimentLabel.text(`${sentimentPercentage}% positive`);
+  } else {
+    // Negative - fill to the left
+    const absPercentage = Math.abs(sentimentPercentage);
+    sentimentFill
+      .style('left', `${50 - (absPercentage / 2)}%`)
+      .style('width', `${absPercentage / 2}%`)
+      .style('background-color', colors.sentimentNegative);
+    sentimentLabel.text(`${absPercentage}% negative`);
+  }
+}
+
 const showSelectedMovies = (word, movies, hoverValue) => {
   const selectedMovieList = d3.select('.selected-movie-list');
   const emptyState = selectedMovieList.select('.empty-state');
@@ -131,8 +189,18 @@ const showSelectedMovies = (word, movies, hoverValue) => {
     selectedMovieList.html('');
     emptyState.html('Hover over cells for more movie details');
     selectedMovieList.append(() => emptyState.node());
+    openDescriptions = [];
+    currentMovies = [];
+    updateSentimentBar(null);
     return;
   }
+
+  // Store current movies and reset open descriptions
+  currentMovies = movies;
+  openDescriptions = [];
+  
+  // Update sentiment bar with average of all movies
+  updateSentimentBar(calculateAverageSentiment(movies));
 
   // Clear existing content
   selectedMovieList.html('');
@@ -182,15 +250,7 @@ const showSelectedMovies = (word, movies, hoverValue) => {
         .html('+');
 
       const description = details.append('div')
-        .attr('class', 'description')
-
-      /** 
-      const sentimentPercentage = getSentimentValue(d.sentiment);
-      const sentimentText = sentimentPercentage !== 0 ? `${Math.abs(sentimentPercentage)}% ${d.sentiment >= 0 ? 'positive' : 'negative'}` : `Neutral`;
-      description.append('p')
-        .attr('class', 'sentiment')
-        .html(`${sentimentText}`);
-      */
+        .attr('class', 'description');
 
       d.description.forEach(s => {
         description.append('p')
@@ -199,7 +259,28 @@ const showSelectedMovies = (word, movies, hoverValue) => {
       });
 
       titleContainer.on('click', () => {
-        description.classed('show', !description.classed('show'));
+        const isExpanding = !description.classed('show');
+        description.classed('show', isExpanding);
+        
+        // Update open descriptions array
+        if (isExpanding) {
+          openDescriptions.push(d.id);
+        } else {
+          openDescriptions = openDescriptions.filter(id => id !== d.id);
+        }
+        
+        // Update sentiment bar based on open descriptions
+        if (openDescriptions.length > 0) {
+          // Show average of open descriptions
+          const openMovies = currentMovies.filter(movie => openDescriptions.includes(movie.id));
+          updateSentimentBar(calculateAverageSentiment(openMovies));
+        } else {
+          // Revert to average of all current movies
+          updateSentimentBar(calculateAverageSentiment(currentMovies));
+        }
+        
+        // Update tooltip to show the most recently opened description
+        updateTooltip();
       });
     }
   });
@@ -280,6 +361,53 @@ const sentimentColorScale = d3.scaleLinear()
 const tooltip = d3.select("body")
   .append("div")
   .attr("class", "tooltip");
+
+// Helper to update tooltip with movie poster
+const updateTooltip = () => {
+  let movieToShow = null;
+  
+  // If there are open descriptions, show the most recently opened one
+  if (openDescriptions.length > 0) {
+    const lastOpenedId = openDescriptions[openDescriptions.length - 1];
+    movieToShow = currentMovies.find(m => m.id === lastOpenedId);
+  } else if (currentMovies.length > 0) {
+    // Otherwise show the first movie from current hover
+    movieToShow = currentMovies[0];
+  }
+  
+  // Don't update if we're already showing this movie
+  if (movieToShow && movieToShow.id === currentTooltipMovieId) {
+    return;
+  }
+  
+  // Update the current tooltip movie ID
+  currentTooltipMovieId = movieToShow ? movieToShow.id : null;
+  
+  tooltip.html(''); // clear existing content
+  
+  if (movieToShow && movieToShow.poster) {
+    const loadingDiv = tooltip.append("div").attr("class", "loading-tooltip");
+    tooltip.style("visibility", "visible");
+    tooltip.style("opacity", 1);
+    
+    const img = tooltip.append("img")
+      .attr("src", `${posterUrl}${movieToShow.poster}`)
+      .attr("alt", movieToShow.title)
+      .style("opacity", 0); // Start hidden
+    
+    // Fade out loading and fade in image when loaded
+    img.on('load', function() {
+      loadingDiv.classed('hide-loading', true);
+      d3.select(this).transition().duration(300).style("opacity", 1);
+    });
+    
+    // Fallback in case image loads before event listener is attached
+    if (img.node().complete) {
+      loadingDiv.classed('hide-loading', true);
+      img.style("opacity", 1);
+    }
+  }
+};
 
 // Show loading indicator
 d3.select('.selected-movie-list').html('<p class="empty-state">Loading data...</p>');
@@ -420,8 +548,6 @@ const processData = (data) => {
     d => d.word
   );
 
-  console.log(rolled)
-
   // convert the nested rollup into the expected array of objects
   const result = Array.from(rolled, ([length, varMap]) => {
     return Array.from(varMap, ([word, aggregated]) => ({
@@ -440,7 +566,6 @@ const loadData = async () => {
 
   // Step 1: Filter movies that contain topWords (before enrichment)
   const filteredMovies = filterMoviesWithTopWords(data);
-  console.log(`Filtered to ${filteredMovies.length} movies (from ${data.length} total) containing topWords`);
 
   // Step 2: Enrich filtered movies with TMDB data
   d3.select('.selected-movie-list').html('<p class="empty-state"><span>Fetching TMDB data...</span></p>');
@@ -664,6 +789,7 @@ const loadData = async () => {
       
       // Use showSelectedMovies helper (pass null for word since we don't highlight a specific word)
       showSelectedMovies(null, uniqueMovies, hoverValue);
+      updateTooltip(); // Update tooltip after showing movies
     } else {
       showSelectedMovies(null);
     }
@@ -740,29 +866,10 @@ const loadData = async () => {
       .style("fill", function(d) { return colorScale(d.value)} )
       .on("mouseover", function(event, d) {
         if (!activeSelection) {
-          const loadingDiv = tooltip.append("div").attr("class", "loading-tooltip");
-          tooltip.style("visibility", "visible");
-          tooltip.style("opacity", 1);
-          
-          // show first movie by default
-          const movieSelection = d.movies[0];
-          
-          // Show poster of random movie if available
-          if (movieSelection.poster) {
-            tooltip.append("img")
-              .attr("src", `${posterUrl}${movieSelection.poster}`)
-              .attr("alt", movieSelection.title);
-
-            setTimeout(() => {
-              loadingDiv.classed('hide-loading', true);
-            }, 800);
-          } else {
-            tooltip.style("opacity", 0.7);
-          }
-
           highlightTick(d.word);
 
           showSelectedMovies(d.word, d.movies, d.value);
+          updateTooltip(); // Update tooltip based on currentMovies/openDescriptions
           updateLegendTick(d.value); // show tick on hover
           svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false); // clear filtering
         }
@@ -783,6 +890,7 @@ const loadData = async () => {
           tooltip.style("opacity", 0);
 
           tooltip.html(''); // clear tooltip content
+          currentTooltipMovieId = null; // reset tooltip tracking
         }
       })
       .on('click', function(event, d) {
