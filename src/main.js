@@ -17,7 +17,7 @@ const legendHeight = 10;
 const legendX = 0;
 const legendY = 50;
 
-let minViews, maxViews;
+let minViews, maxViews, minSentiment, maxSentiment;
 let activeSelection = null;
 
 // column labels = runtimes (in minutes)
@@ -108,6 +108,20 @@ const getEnglishTitle = (title) => {
   return title.split("//")[0];
 };
 
+function getSentimentValue(score) {
+  let sentimentValue = 0;
+  if (score > 0) {
+    // positive side: map 0 → maxSentiment   to   0 → 1
+    sentimentValue = score / maxSentiment;
+  } 
+  if (score < 0) {
+    // negative side: map 0 → minSentiment   to   0 → -1
+    sentimentValue = -(Math.abs(score) / Math.abs(minSentiment));
+  }
+
+  return Math.round(sentimentValue * 100);
+}
+
 const showSelectedMovies = (word, movies, hoverValue) => {
   const selectedMovieList = d3.select('.selected-movie-list');
   const emptyState = selectedMovieList.select('.empty-state');
@@ -152,21 +166,42 @@ const showSelectedMovies = (word, movies, hoverValue) => {
     const titleContainer = details.append('div')
       .attr('class', 'movie-title-container')
 
-    titleContainer.append('p')
+    const titleText = titleContainer.append('div')
       .attr('class', 'movie-title')
-      .html(`${displayTitle} <span class="views-text">${viewsInKOrM} views</span>`);
     
-    titleContainer.append('p')
-      .attr('class', 'toggle-icon')
-      .html('+');
+    titleText.append('h4')
+      .html(displayTitle);
+    
+    titleText.append('span')
+      .attr('class', 'views-text')
+      .html(`${viewsInKOrM} views`);
 
-    const description = details.append('p')
-      .attr('class', 'description')
-      .text(d.description);
-    
-    titleContainer.on('click', () => {
-      description.classed('show', !description.classed('show'));
-    });
+    if (!!d.description.length) {
+      titleContainer.append('p')
+        .attr('class', 'toggle-icon')
+        .html('+');
+
+      const description = details.append('div')
+        .attr('class', 'description')
+
+      /** 
+      const sentimentPercentage = getSentimentValue(d.sentiment);
+      const sentimentText = sentimentPercentage !== 0 ? `${Math.abs(sentimentPercentage)}% ${d.sentiment >= 0 ? 'positive' : 'negative'}` : `Neutral`;
+      description.append('p')
+        .attr('class', 'sentiment')
+        .html(`${sentimentText}`);
+      */
+
+      d.description.forEach(s => {
+        description.append('p')
+          .text(s.text)
+          .style('color', !!s.score ? sentimentColorScale(s.score) : colors.sentimentNeutral);
+      });
+
+      titleContainer.on('click', () => {
+        description.classed('show', !description.classed('show'));
+      });
+    }
   });
 }
 
@@ -233,9 +268,13 @@ const calculateCategoryLevels = (categories) => {
   return levels;
 };
 
-// build color scale
+// build color scale for views
 const colorScale = d3.scaleLinear()
   .range([colors.scaleLight, colors.scaleMid, colors.scaleDark])
+
+// build color scale for sentiment
+const sentimentColorScale = d3.scaleLinear()
+  .range([colors.sentimentNegative, colors.sentimentNeutral, colors.sentimentPositive]);
 
 // create tooltip
 const tooltip = d3.select("body")
@@ -343,6 +382,7 @@ const processData = (data) => {
     const productionCountries = row.productionCountries || [];
     const description = row.description || '';
     const poster = row.poster || '';
+    const sentiment = row.sentiment || [];
 
     // Create an item for each topWord found in the title
     return topWordsInTitle.map(normalized => ({ 
@@ -355,6 +395,7 @@ const processData = (data) => {
       productionCountries,
       description,
       poster,
+      sentiment
     }));
   });
 
@@ -371,7 +412,8 @@ const processData = (data) => {
         id: d.tconst,
         productionCountries: d.productionCountries,
         description: d.description,
-        poster: d.poster
+        poster: d.poster,
+        sentiment: d.sentiment
       }))
     }),
     d => d.length,
@@ -401,13 +443,18 @@ const loadData = async () => {
   console.log(`Filtered to ${filteredMovies.length} movies (from ${data.length} total) containing topWords`);
 
   // Step 2: Enrich filtered movies with TMDB data
-  d3.select('.selected-movie-list').html('<p class="empty-state">Fetching TMDB data...</p>');
-  const enrichedMovies = await enrichMoviesArray(filteredMovies);
+  d3.select('.selected-movie-list').html('<p class="empty-state"><span>Fetching TMDB data...</span></p>');
+  const { movies, minScore, maxScore } = await enrichMoviesArray(filteredMovies);
+  minSentiment = minScore;
+  maxSentiment = maxScore;
+
+  const midScore = (minScore + maxScore) / 2;
+  sentimentColorScale.domain([minScore, midScore, maxScore]);
 
   d3.select('.selected-movie-list').html('<p class="empty-state">Hover over cells for more movie details</p>');
 
   // Step 3: Process enriched data into cells
-  let processedData = processData(enrichedMovies);
+  let processedData = processData(movies);
 
   // Step 4: Create SVG and scales (after data is ready)
   svg = d3.select("#heatmap")
@@ -697,14 +744,14 @@ const loadData = async () => {
           tooltip.style("visibility", "visible");
           tooltip.style("opacity", 1);
           
-          // Pick a random movie from this cell
-          const randomMovie = d.movies[Math.floor(Math.random() * d.movies.length)];
+          // show first movie by default
+          const movieSelection = d.movies[0];
           
           // Show poster of random movie if available
-          if (randomMovie.poster) {
+          if (movieSelection.poster) {
             tooltip.append("img")
-              .attr("src", `${posterUrl}${randomMovie.poster}`)
-              .attr("alt", randomMovie.title);
+              .attr("src", `${posterUrl}${movieSelection.poster}`)
+              .attr("alt", movieSelection.title);
 
             setTimeout(() => {
               loadingDiv.classed('hide-loading', true);

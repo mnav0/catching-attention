@@ -11,6 +11,7 @@
   "devDependencies": {
     "@rollup/plugin-dsv": "^3.0.5",
     "d3": "^7.9.0",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "wink-sentiment": "^5.0.2"
   }
 }

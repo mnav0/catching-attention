@@ -1,16 +1,21 @@
 body {
-  color: #1f1d1d;
+  color: #16161D;
   background-color: white;
   font-family: "Nunito Sans", sans-serif;
 }
 
+h1, h4 {
+  font-family: "Cormorant Garamond", serif;
+  font-weight: 400;
+}
+
 h1 {
-  font-size: 18px;
+  font-size: 36px;
 }
 
 text {
   font-family: "Nunito Sans", sans-serif;
-  fill: #1f1d1d;
+  fill: #16161D;
 }
 
 .container {
@@ -22,12 +27,13 @@ text {
 }
 
 .text {
-  max-width: 75vw;
+  max-width: 80vw;
   margin: auto;
+  font-size: 12px;
 }
 
 a {
-  color: #1f1d1d;
+  color: #16161D;
 }
 
 .vis-wrapper {
@@ -61,7 +67,7 @@ a {
 
 .selected-movie-list {
   background-color: white;
-  border: 1px solid #1f1d1d33;
+  border: 1px solid #16161D33;
   padding: 0.5em 1em;
   max-height: 70vh;
   overflow-y: scroll;
@@ -80,16 +86,28 @@ a {
 }
 
 .movie-title {
-  font-size: 18px;
   flex: 0.9;
   text-align: left;
+  align-self: center;
+  margin: 0.5em 0;
+}
+
+.movie-title h4 {
+  font-size: 18px;
+  margin: 0;
 }
 
 .description {
   margin-top: 0;
   font-size: 12px;
   display: none;
-  padding: 0 1em;
+  padding: 1em;
+  text-align: left;
+  border-top: 1px solid #F4F3EF;
+}
+
+.description p {
+  margin: 0.25em 0;
 }
 
 .show {
@@ -100,11 +118,11 @@ a {
   cursor: pointer;
   display: flex;
   justify-content: space-between;
-  padding: 0 1em;
+  padding: 0 0.75em;
 }
 
 .movie-details {
-  border-bottom: 1px solid #e1e0db;
+  border-bottom: 1px solid #F4F3EF;
 }
 
 .movie-details:last-child {
@@ -112,17 +130,18 @@ a {
 }
 
 .views-text {
-  font-style: italic;
   font-size: 12px;
+  display: inline;
+  font-style: italic;
 }
 
 .active {
-  stroke: #b20710;
+  stroke: #16161D;
   stroke-width: 1.5;
 }
 
 .legend-active {
-  stroke: #b20710;
+  stroke: #16161D;
   stroke-width: 0.75;
 }
 
@@ -139,8 +158,8 @@ a {
   position: absolute;
   visibility: hidden;
   opacity: 0;
-  background-color: #f4f3ef;
-  border: 1px solid #d3d3d3;
+  background-color: white;
+  border: 1px solid #F4F3EF;
   border-radius: 5px;
   padding: 0;
   overflow: hidden;
@@ -172,4 +191,8 @@ a {
   display: block;
   position: absolute;
   top: 0;
+}
+
+.sentiment {
+  font-style: italic;
 }

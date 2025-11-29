@@ -1,8 +1,10 @@
 export const colors = {
-  dark: "#1f1d1d",
-  mid: "#a19999ff",
-  light: "#F4F3EF",
-  scaleLight: "#FAE8E6",
-  scaleMid: "#D42C21",
-  scaleDark: "#B20710"
+  dark: "#16161D",
+  light: "#FCF7E9",
+  scaleLight: "#d9eaf0ff",
+  scaleMid: "#597787ff",
+  scaleDark: "#031f2eff",
+  sentimentPositive: "#0E8E51",
+  sentimentNeutral: "#6C6A4F",
+  sentimentNegative: "#921B15"
 }
