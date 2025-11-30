@@ -146,7 +146,6 @@ export async function enrichMoviesArray(movies) {
     
     const enrichedMovies = [];
     for (let i = 0; i < batches.length; i++) {
-        console.log(`Processing batch ${i + 1}/${batches.length}...`);
         const batchResults = await processBatch(batches[i], BATCH_DELAY);
         enrichedMovies.push(...batchResults);
     }

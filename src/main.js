@@ -1,5 +1,5 @@
 import * as d3 from "d3";
-import moviesCSV from './data/NetflixMovies_added.csv';
+import moviesCSV from './data/NetflixAdded-merged.csv';
 import { topWords, wordCategories } from './constants/words.js';
 import { colors } from './constants/colors.js';
 import { enrichMoviesArray } from './tmdb-api.js';
@@ -243,27 +243,32 @@ const showSelectedMovies = (word, movies, hoverValue, autoOpenFirst = false, sho
   // Clear existing content
   selectedMovieList.html('');
   
-  // Add header with count and views
+  // Add header with count and average views
   selectedMovieList.append('p')
     .attr('class', 'empty-state')
-    .html(`${movies.length} title${movies.length > 1 ? 's' : ''} | <span>${getViewsInKOrM(hoverValue)} views</span>`);
+    .html(`${movies.length} title${movies.length > 1 ? 's' : ''} | <span>${getViewsInKOrM(hoverValue)} average views</span>`);
 
   // Add movie entries
   movies.forEach((d, index) => {
     const englishMovie = getEnglishTitle(d.title);
     const viewsInKOrM = getViewsInKOrM(d.views);
     
-    // Bold the word in the title if it exists
+    // Bold the word(s) in the title if they exist
     let displayTitle = englishMovie;
     if (word) {
-      const wordRegex = new RegExp(`\\b(${word})\\b`, 'i');
-      if (wordRegex.test(englishMovie)) {
-        displayTitle = englishMovie.replace(wordRegex, '<strong>$1</strong>');
-      } else {
-        const unnormalizedWord = unnormalizePlural(word);
-        const unnormalizedRegex = new RegExp(`\\b(${unnormalizedWord})\\b`, 'i');
-        displayTitle = englishMovie.replace(unnormalizedRegex, '<strong>$1</strong>');
-      }
+      // If word is an array, highlight all words
+      const wordsToHighlight = Array.isArray(word) ? word : [word];
+      
+      wordsToHighlight.forEach(w => {
+        const wordRegex = new RegExp(`\\b(${w})\\b`, 'gi');
+        if (wordRegex.test(displayTitle)) {
+          displayTitle = displayTitle.replace(wordRegex, '<strong>$1</strong>');
+        } else {
+          const unnormalizedWord = unnormalizePlural(w);
+          const unnormalizedRegex = new RegExp(`\\b(${unnormalizedWord})\\b`, 'gi');
+          displayTitle = displayTitle.replace(unnormalizedRegex, '<strong>$1</strong>');
+        }
+      });
     }
     
     const details = selectedMovieList.append('div')
@@ -520,10 +525,13 @@ const getTopWordsFromTitle = (title) => {
   // Only process movies with 5 or fewer words
   if (!words.length || words.length > 5) return [];
 
-  // Return normalized words that are in topWords
-  return words
+  // Return unique normalized words that are in topWords
+  const normalizedWords = words
     .map(word => normalizePlural(word))
     .filter(normalized => topWords.includes(normalized));
+  
+  // Deduplicate - use Set to remove duplicate words
+  return [...new Set(normalizedWords)];
 }
 
 // Filter movies that contain any topWords (before enrichment to save API calls)
@@ -808,8 +816,9 @@ const loadData = async () => {
       return;
     }
 
-    // collect all movies from cells in the value range
+    // collect all movies from highlighted cells and track unique words
     const matchingMovies = [];
+    const matchingWords = new Set();
     
     svg.selectAll('.data-cell').each(function(d) {
       if (!d) return;
@@ -818,28 +827,33 @@ const loadData = async () => {
         .classed('legend-active', isInRange)
         .classed('inactive', !isInRange);
       
-      // collect ALL movies from active cells (don't filter individual movie.views)
+      // collect ALL movies from highlighted cells (not filtered by individual movie.views)
       if (isInRange && d.movies) {
+        matchingWords.add(d.word); // track unique words from highlighted cells
         d.movies.forEach(movie => {
-          const isMovieInRange = Math.abs(movie.views - hoverValue) <= tolerance;
-          if (isMovieInRange) {
-            matchingMovies.push({ ...movie, word: d.word });
-          }
+          matchingMovies.push({ ...movie, word: d.word });
         });
       }
     });
 
     // show the filtered movies
     if (matchingMovies.length > 0) {
-      // sort by views descending
-      matchingMovies.sort((a, b) => b.views - a.views);
+      // sort by distance from hovered value (closest first), then by views descending
+      matchingMovies.sort((a, b) => {
+        const distA = Math.abs(a.views - hoverValue);
+        const distB = Math.abs(b.views - hoverValue);
+        if (distA !== distB) return distA - distB;
+        return b.views - a.views;
+      });
+      
       // dedupe by title
       const uniqueMovies = Array.from(
         new Map(matchingMovies.map(m => [m.title.trim().toLowerCase(), m])).values()
       );
       
-      // Use showSelectedMovies helper (pass null for word since we don't highlight a specific word)
-      showSelectedMovies(null, uniqueMovies, hoverValue, false, false, true); // Use title sentiment only on legend hover
+      // Pass all matching words as an array to highlight them in titles
+      const wordsArray = Array.from(matchingWords);
+      showSelectedMovies(wordsArray, uniqueMovies, hoverValue, false, false, true); // Use title sentiment only on legend hover
       // Don't update tooltip when hovering legend - tooltip should only show for cell hovers and description clicks
     } else {
       showSelectedMovies(null);
