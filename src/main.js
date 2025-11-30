@@ -76,7 +76,7 @@ const setActiveSelection = (d) => {
   selectedMovieList.html('');
   selectedMovieList.append(() => emptyState.node());
   emptyState.html('Titles');
-  showSelectedMovies(d.word, d.movies, d.value);
+  showSelectedMovies(d.word, d.movies, d.value, true); // Auto-open first description
   updateTooltip(); // Update tooltip when new cell is selected
   updateLegendTick(d.value); // show tick at cell's value position
 }
@@ -84,6 +84,9 @@ const setActiveSelection = (d) => {
 
 // helper to highlight a y tick (word) and reset
 const highlightTick = (word) => {
+  // Don't highlight if there's an active selection
+  if (activeSelection) return;
+  
   yAxisG.selectAll('.tick')
     .filter(d => d === word)
     .select('text')
@@ -127,7 +130,7 @@ function getSentimentValue(score) {
   return Math.round(sentimentValue * 100);
 }
 
-// Helper to calculate average sentiment from an array of movies
+// Helper to calculate average sentiment from an array of movies (using combined title + description)
 const calculateAverageSentiment = (movies) => {
   if (!movies || movies.length === 0) return null;
   
@@ -136,6 +139,17 @@ const calculateAverageSentiment = (movies) => {
   
   const avgSentiment = d3.mean(moviesWithSentiment, m => m.sentiment);
   return { sentiment: avgSentiment };
+};
+
+// Helper to calculate average title sentiment only
+const calculateAverageTitleSentiment = (movies) => {
+  if (!movies || movies.length === 0) return null;
+  
+  const moviesWithTitleSentiment = movies.filter(m => m.titleSentiment !== undefined && m.titleSentiment !== null);
+  if (moviesWithTitleSentiment.length === 0) return null;
+  
+  const avgTitleSentiment = d3.mean(moviesWithTitleSentiment, m => m.titleSentiment);
+  return { sentiment: avgTitleSentiment };
 };
 
 // Update sentiment bar based on movie data
@@ -149,7 +163,7 @@ function updateSentimentBar(movieData) {
       .style('width', '0%')
       .style('left', '50%')
       .style('background-color', 'transparent');
-    sentimentLabel.text('');
+    sentimentLabel.text('Average sentiment');
     return;
   }
 
@@ -161,14 +175,14 @@ function updateSentimentBar(movieData) {
       .style('width', '0%')
       .style('left', '50%')
       .style('background-color', 'transparent');
-    sentimentLabel.text('Neutral');
+    sentimentLabel.text('Average sentiment: neutral');
   } else if (sentimentPercentage > 0) {
     // Positive - fill to the right
     sentimentFill
       .style('left', '50%')
       .style('width', `${sentimentPercentage / 2}%`) // divide by 2 because it's only half the bar
       .style('background-color', colors.sentimentPositive);
-    sentimentLabel.text(`${sentimentPercentage}% positive`);
+    sentimentLabel.text(`Average sentiment: ${sentimentPercentage}% positive`);
   } else {
     // Negative - fill to the left
     const absPercentage = Math.abs(sentimentPercentage);
@@ -176,7 +190,7 @@ function updateSentimentBar(movieData) {
       .style('left', `${50 - (absPercentage / 2)}%`)
       .style('width', `${absPercentage / 2}%`)
       .style('background-color', colors.sentimentNegative);
-    sentimentLabel.text(`${absPercentage}% negative`);
+    sentimentLabel.text(`Average sentiment: ${absPercentage}% negative`);
   }
 }
 
@@ -194,7 +208,7 @@ const unnormalizePlural = (word) => {
   return word + 's';
 };
 
-const showSelectedMovies = (word, movies, hoverValue) => {
+const showSelectedMovies = (word, movies, hoverValue, autoOpenFirst = false, showToggleIcons = true, useTitleSentimentOnly = false) => {
   const selectedMovieList = d3.select('.selected-movie-list');
   const emptyState = selectedMovieList.select('.empty-state');
   
@@ -213,8 +227,18 @@ const showSelectedMovies = (word, movies, hoverValue) => {
   currentMovies = movies;
   openDescriptions = [];
   
-  // Update sentiment bar with average of all movies
-  updateSentimentBar(calculateAverageSentiment(movies));
+  // Update sentiment bar - choose sentiment type based on context
+  if (useTitleSentimentOnly) {
+    // For hover states: use title sentiment only
+    updateSentimentBar(calculateAverageTitleSentiment(movies));
+  } else if (autoOpenFirst && movies.length > 0 && movies[0].description && movies[0].description.length > 0) {
+    // For active selection with first description open: use combined sentiment
+    openDescriptions.push(movies[0].id);
+    updateSentimentBar(calculateAverageSentiment([movies[0]]));
+  } else {
+    // For active selection without open descriptions: use combined average
+    updateSentimentBar(calculateAverageSentiment(movies));
+  }
 
   // Clear existing content
   selectedMovieList.html('');
@@ -225,7 +249,7 @@ const showSelectedMovies = (word, movies, hoverValue) => {
     .html(`${movies.length} title${movies.length > 1 ? 's' : ''} | <span>${getViewsInKOrM(hoverValue)} views</span>`);
 
   // Add movie entries
-  movies.forEach(d => {
+  movies.forEach((d, index) => {
     const englishMovie = getEnglishTitle(d.title);
     const viewsInKOrM = getViewsInKOrM(d.views);
     
@@ -259,9 +283,14 @@ const showSelectedMovies = (word, movies, hoverValue) => {
       .html(`${viewsInKOrM} views`);
 
     if (!!d.description.length) {
-      titleContainer.append('p')
-        .attr('class', 'toggle-icon')
-        .html('+');
+      let toggleIcon = null;
+      
+      // Only add toggle icon if showToggleIcons is true
+      if (showToggleIcons) {
+        toggleIcon = titleContainer.append('p')
+          .attr('class', 'toggle-icon')
+          .html('+');
+      }
 
       const description = details.append('div')
         .attr('class', 'description');
@@ -271,31 +300,42 @@ const showSelectedMovies = (word, movies, hoverValue) => {
           .text(s.text)
           .style('color', !!s.score ? sentimentColorScale(s.score) : colors.sentimentNeutral);
       });
+      
+      // Auto-open first description if requested
+      const isFirstMovie = index === 0;
+      if (autoOpenFirst && isFirstMovie) {
+        description.classed('show', true);
+        if (toggleIcon) toggleIcon.html('−');
+      }
 
-      titleContainer.on('click', () => {
-        const isExpanding = !description.classed('show');
-        description.classed('show', isExpanding);
-        
-        // Update open descriptions array
-        if (isExpanding) {
-          openDescriptions.push(d.id);
-        } else {
-          openDescriptions = openDescriptions.filter(id => id !== d.id);
-        }
-        
-        // Update sentiment bar based on open descriptions
-        if (openDescriptions.length > 0) {
-          // Show average of open descriptions
-          const openMovies = currentMovies.filter(movie => openDescriptions.includes(movie.id));
-          updateSentimentBar(calculateAverageSentiment(openMovies));
-        } else {
-          // Revert to average of all current movies
-          updateSentimentBar(calculateAverageSentiment(currentMovies));
-        }
-        
-        // Update tooltip to show the most recently opened description
-        updateTooltip();
-      });
+      // Only add click handler if toggle icons are shown (meaning this is an active selection)
+      if (showToggleIcons) {
+        titleContainer.on('click', () => {
+          const isExpanding = !description.classed('show');
+          description.classed('show', isExpanding);
+          if (toggleIcon) toggleIcon.html(isExpanding ? '−' : '+');
+          
+          // Update open descriptions array
+          if (isExpanding) {
+            openDescriptions.push(d.id);
+          } else {
+            openDescriptions = openDescriptions.filter(id => id !== d.id);
+          }
+          
+          // Update sentiment bar based on open descriptions
+          if (openDescriptions.length > 0) {
+            // Show average of open descriptions
+            const openMovies = currentMovies.filter(movie => openDescriptions.includes(movie.id));
+            updateSentimentBar(calculateAverageSentiment(openMovies));
+          } else {
+            // Revert to average of all current movies
+            updateSentimentBar(calculateAverageSentiment(currentMovies));
+          }
+          
+          // Update tooltip to show the most recently opened description
+          updateTooltip();
+        });
+      }
     }
   });
 }
@@ -399,26 +439,32 @@ const updateTooltip = () => {
   
   tooltip.html(''); // clear existing content
   
-  if (movieToShow && movieToShow.poster) {
-    const loadingDiv = tooltip.append("div").attr("class", "loading-tooltip");
-    tooltip.style("visibility", "visible");
-    tooltip.style("opacity", 1);
-    
-    const img = tooltip.append("img")
-      .attr("src", `${posterUrl}${movieToShow.poster}`)
-      .attr("alt", movieToShow.title)
-      .style("opacity", 0); // Start hidden
-    
-    // Fade out loading and fade in image when loaded
-    img.on('load', function() {
-      loadingDiv.classed('hide-loading', true);
-      d3.select(this).transition().duration(300).style("opacity", 1);
-    });
-    
-    // Fallback in case image loads before event listener is attached
-    if (img.node().complete) {
-      loadingDiv.classed('hide-loading', true);
-      img.style("opacity", 1);
+  if (movieToShow) {
+    if (movieToShow.poster) {
+      // Has poster - show with loading state
+      const loadingDiv = tooltip.append("div").attr("class", "loading-tooltip");
+      tooltip.style("visibility", "visible");
+      tooltip.style("opacity", 1);
+      
+      const img = tooltip.append("img")
+        .attr("src", `${posterUrl}${movieToShow.poster}`)
+        .attr("alt", movieToShow.title)
+        .style("opacity", 0); // Start hidden
+      
+      // Fade out loading and fade in image when loaded
+      img.on('load', function() {
+        loadingDiv.classed('hide-loading', true);
+        d3.select(this).transition().duration(300).style("opacity", 1);
+      });
+      
+      // Fallback in case image loads before event listener is attached
+      if (img.node().complete) {
+        loadingDiv.classed('hide-loading', true);
+        img.style("opacity", 1);
+      }
+    } else {
+      tooltip.style("visibility", "visible");
+      tooltip.style("opacity", 0.6);
     }
   }
 };
@@ -509,7 +555,9 @@ const processData = (data) => {
     const productionCountries = row.productionCountries || [];
     const description = row.description || '';
     const poster = row.poster || '';
-    const sentiment = row.sentiment || [];
+    const sentiment = row.sentiment;
+    const titleSentiment = row.titleSentiment;
+    const descriptionSentiment = row.descriptionSentiment;
 
     // Create an item for each topWord found in the title
     return topWordsInTitle.map(normalized => ({ 
@@ -522,7 +570,9 @@ const processData = (data) => {
       productionCountries,
       description,
       poster,
-      sentiment
+      sentiment,
+      titleSentiment,
+      descriptionSentiment
     }));
   });
 
@@ -540,7 +590,9 @@ const processData = (data) => {
         productionCountries: d.productionCountries,
         description: d.description,
         poster: d.poster,
-        sentiment: d.sentiment
+        sentiment: d.sentiment,
+        titleSentiment: d.titleSentiment,
+        descriptionSentiment: d.descriptionSentiment
       }))
     }),
     d => d.length,
@@ -787,7 +839,7 @@ const loadData = async () => {
       );
       
       // Use showSelectedMovies helper (pass null for word since we don't highlight a specific word)
-      showSelectedMovies(null, uniqueMovies, hoverValue);
+      showSelectedMovies(null, uniqueMovies, hoverValue, false, false, true); // Use title sentiment only on legend hover
       // Don't update tooltip when hovering legend - tooltip should only show for cell hovers and description clicks
     } else {
       showSelectedMovies(null);
@@ -867,15 +919,20 @@ const loadData = async () => {
         if (!activeSelection) {
           highlightTick(d.word);
 
-          showSelectedMovies(d.word, d.movies, d.value);
+          showSelectedMovies(d.word, d.movies, d.value, false, false, true); // Use title sentiment only on hover
           updateTooltip(); // Update tooltip based on currentMovies/openDescriptions
           updateLegendTick(d.value); // show tick on hover
           svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false); // clear filtering
         }
+        // When there's an active selection, tooltip stays locked - do nothing on hover
       })
-      .on("mousemove", function(event) {
-        tooltip.style("top", (event.pageY - 10) + "px")
-               .style("left", (event.pageX + 10) + "px");
+      .on("mousemove", function(event, d) {
+        // Only allow tooltip to move if there's no active selection
+        if (!activeSelection) {
+          tooltip.style("top", (event.pageY - 10) + "px")
+                 .style("left", (event.pageX + 10) + "px");
+        }
+        // When there's an active selection, tooltip stays locked at its position
       })
       .on("mouseout", function() {
         resetHighlight();
