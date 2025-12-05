@@ -19,14 +19,22 @@ const legendY = 50;
 
 let minViews, maxViews, minSentiment, maxSentiment;
 let activeSelection = null;
+let activeCategorySelection = null; // Track selected category
 let openDescriptionId = null; // Track ID of the currently open description (only one at a time)
 let currentMovies = []; // Store current movies being displayed
 let currentTooltipMovieId = null; // Track which movie is currently displayed in tooltip
 let movieShownInTooltip = null; // Store the movie object shown in tooltip
 let totalMovieCount = 0; // Total number of unique movies in consideration
+let processedData = null; // Store processed data globally for category aggregation
+let displayedPosterMovies = []; // Track movie IDs whose posters are displayed, in order of priority
 
 // column labels = runtimes (in minutes)
 const runtimes = d3.range(20, 200, 10);
+
+// Helper: Find which categories a word belongs to
+const getCategoriesForWord = (word) => {
+  return wordCategories.filter(cat => cat.words.includes(word));
+};
 
 // Declare variables that will be initialized after data loads
 let svg, x, y, yAxisG;
@@ -63,10 +71,22 @@ const setActiveSelection = (d) => {
 
     tooltip.html(''); // clear tooltip content
     currentTooltipMovieId = null; // reset tooltip tracking
+    
+    // Clear any posters when clearing selection
+    d3.selectAll('.poster-overlay').remove();
+    
     return;
   }
 
+  // Clear any category selection when selecting a cell
+  if (activeCategorySelection) {
+    clearCategorySelection();
+  }
+
   activeSelection = d;
+
+  // Ensure posters are cleared (defensive, should already be cleared by clearCategorySelection)
+  d3.selectAll('.poster-overlay').remove();
 
   // visually mark the selected data rect
   svg.selectAll('.data-cell').classed('active', cellD => cellD && cellD.word === d.word && cellD.length === d.length);
@@ -134,17 +154,6 @@ const calculateAverageSentiment = (movies) => {
   
   const avgSentiment = d3.mean(moviesWithSentiment, m => m.sentiment);
   return { sentiment: avgSentiment };
-};
-
-// Helper to calculate average title sentiment only
-const calculateAverageTitleSentiment = (movies) => {
-  if (!movies || movies.length === 0) return null;
-  
-  const moviesWithTitleSentiment = movies.filter(m => m.titleSentiment !== undefined && m.titleSentiment !== null);
-  if (moviesWithTitleSentiment.length === 0) return null;
-  
-  const avgTitleSentiment = d3.mean(moviesWithTitleSentiment, m => m.titleSentiment);
-  return { sentiment: avgTitleSentiment };
 };
 
 // Update sentiment bar based on movie data
@@ -225,7 +234,7 @@ const showSelectedMovies = (word, movies, hoverValue, autoOpenFirst = false, sho
     movieShownInTooltip = null;
     updateSentimentBar(null);
     // Clear movie count
-    movieCountElem.html(`${totalMovieCount} movies`);
+    movieCountElem.html(`${totalMovieCount.toLocaleString()} movies`);
     movieCountElem.classed("movie-count-selected", false);
     return;
   }
@@ -349,10 +358,13 @@ const showSelectedMovies = (word, movies, hoverValue, autoOpenFirst = false, sho
           .style('color', !!s.score ? sentimentColorScale(s.score) : colors.sentimentNeutral);
       });
       
-      // Auto-open description if this is the selected movie
-      if (autoOpenFirst && d.id === openDescriptionId) {
+      // Auto-open description if this is the selected movie OR if shouldExpand is true (for category view)
+      if ((autoOpenFirst && d.id === openDescriptionId) || d.shouldExpand) {
         description.classed('show', true);
         if (toggleIcon) toggleIcon.html('−');
+        if (d.shouldExpand) {
+          openDescriptionId = d.id; // Track as open
+        }
       }
 
       // Only add click handler if toggle icons are shown (meaning this is an active selection)
@@ -360,21 +372,40 @@ const showSelectedMovies = (word, movies, hoverValue, autoOpenFirst = false, sho
         titleContainer.on('click', () => {
           const isExpanding = !description.classed('show');
           
-          // Close all other descriptions
-          d3.selectAll('.description').classed('show', false);
-          d3.selectAll('.toggle-icon').html('+');
-          
-          // Open this description if expanding
-          if (isExpanding) {
-            description.classed('show', true);
-            if (toggleIcon) toggleIcon.html('−');
-            openDescriptionId = d.id; // Set this as the open description
+          // Different behavior for category selection vs cell selection
+          if (activeCategorySelection) {
+            // Category selection: allow multiple descriptions open
+            if (isExpanding) {
+              description.classed('show', true);
+              if (toggleIcon) toggleIcon.html('−');
+              openDescriptionId = d.id;
+            } else {
+              description.classed('show', false);
+              if (toggleIcon) toggleIcon.html('+');
+              // Don't clear openDescriptionId if other descriptions might be open
+            }
+            // Update poster collage
+            updatePosterCollageForDescription(d, isExpanding);
           } else {
-            openDescriptionId = null; // Close all if clicking to collapse
+            // Cell selection: only one description open at a time
+            if (isExpanding) {
+              // Close all other descriptions
+              d3.selectAll('.description').classed('show', false);
+              d3.selectAll('.toggle-icon').html('+');
+              
+              // Open this description
+              description.classed('show', true);
+              if (toggleIcon) toggleIcon.html('−');
+              openDescriptionId = d.id; // Set this as the open description
+            } else {
+              // Collapsing: just close this one
+              description.classed('show', false);
+              if (toggleIcon) toggleIcon.html('+');
+              openDescriptionId = null;
+            }
+            // Update tooltip to show the currently opened description
+            updateTooltip();
           }
-          
-          // Update tooltip to show the currently opened description
-          updateTooltip();
         });
       }
     }
@@ -623,20 +654,24 @@ const processData = (data) => {
     const descriptionSentiment = row.descriptionSentiment;
 
     // Create an item for each topWord found in the title
-    return topWordsInTitle.map(normalized => ({ 
-      length: roundedRuntime, 
-      word: normalized, 
-      views, 
-      title, 
-      runtime, 
-      tconst,
-      productionCountries,
-      description,
-      poster,
-      sentiment,
-      titleSentiment,
-      descriptionSentiment
-    }));
+    return topWordsInTitle.map(normalized => {
+      const categories = getCategoriesForWord(normalized);
+      return { 
+        length: roundedRuntime, 
+        word: normalized, 
+        views, 
+        title, 
+        runtime, 
+        tconst,
+        productionCountries,
+        description,
+        poster,
+        sentiment,
+        titleSentiment,
+        descriptionSentiment,
+        categories: categories.map(c => c.name) // Store category names
+      };
+    });
   });
 
   // roll up by length and word to get average of views 
@@ -661,7 +696,9 @@ const processData = (data) => {
           poster: d.poster,
           sentiment: d.sentiment,
           titleSentiment: d.titleSentiment,
-          descriptionSentiment: d.descriptionSentiment
+          descriptionSentiment: d.descriptionSentiment,
+          categories: d.categories,
+          word: d.word // Keep track of which word this movie came from
         }))
       };
     },
@@ -682,6 +719,318 @@ const processData = (data) => {
   return result;
 }
 
+// Aggregate movies from all cells that contain words in a specific category
+const aggregateMoviesByCategory = (category) => {
+  if (!processedData) return { movies: [], cells: [] };
+  
+  // Find all cells that contain words from this category
+  const cellsInCategory = processedData.filter(cell => 
+    category.words.includes(cell.word)
+  );
+  
+  // Collect all unique movies across these cells
+  // Deduplicate by title
+  const movieMap = new Map();
+  cellsInCategory.forEach(cell => {
+    cell.movies.forEach(movie => {
+      const key = movie.title.trim().toLowerCase();
+      if (!movieMap.has(key)) {
+        movieMap.set(key, movie);
+      }
+    });
+  });
+  
+  const allMovies = Array.from(movieMap.values());
+  
+  // Sort by priority
+  sortMoviesByPriority(allMovies);
+  
+  return {
+    movies: allMovies,
+    cells: cellsInCategory,
+    avgViews: allMovies.length > 0 ? Math.round(d3.mean(allMovies, m => m.views)) : 0
+  };
+};
+
+// Handle category click
+const handleCategoryClick = (category) => {
+  // Toggle: if same category clicked, deselect
+  if (activeCategorySelection && activeCategorySelection.name === category.name) {
+    clearCategorySelection();
+    return;
+  }
+  
+  // Clear any active cell selection
+  if (activeSelection) {
+    setActiveSelection(null);
+  }
+  
+  // Set new category selection
+  activeCategorySelection = category;
+  
+  // Update visual state of category labels
+  svg.selectAll('.category-label').classed('category-selected', false);
+  svg.selectAll('.category-label')
+    .filter(function() { return d3.select(this).attr('data-category') === category.name; })
+    .classed('category-selected', true);
+  
+  // Get aggregated data first
+  const { movies, cells, avgViews } = aggregateMoviesByCategory(category);
+  
+  // Initialize displayedPosterMovies with movies that have posters
+  displayedPosterMovies = cells
+    .map(cell => cell.movies.find(m => m.poster)?.id)
+    .filter(Boolean);
+  
+  // Sort movies by priority
+  sortMoviesByPriority(movies);
+  
+  // Mark movies that should be expanded based on displayedPosterMovies
+  movies.forEach(movie => {
+    movie.shouldExpand = displayedPosterMovies.includes(movie.id);
+  });
+  
+  // Mark cells as active/inactive based on category
+  svg.selectAll('.data-cell').classed('inactive', function(cellD) {
+    if (!cellD) return false;
+    // Cell is inactive if its word is not in the selected category
+    return !category.words.includes(cellD.word);
+  });
+  
+  showSelectedMovies(
+    category.words, // Pass all words in category for highlighting
+    movies,
+    avgViews,
+    false, // Don't auto-open first
+    true, // Show toggle icons
+    false, // Use combined sentiment
+    movies.length // Total count
+  );
+  
+  // Show poster collage on heatmap
+  showPosterCollage(cells);
+  
+  // Update legend tick
+  updateLegendTick(avgViews);
+  
+  // Update tooltip to hide
+  tooltip.style("visibility", "hidden").style("opacity", 0);
+};
+
+// Clear category selection
+const clearCategorySelection = () => {
+  activeCategorySelection = null;
+  displayedPosterMovies = []; // Reset displayed poster movies
+  
+  // Clean up shouldExpand property from all movies in processedData
+  if (processedData) {
+    processedData.forEach(cell => {
+      cell.movies.forEach(movie => {
+        delete movie.shouldExpand;
+      });
+    });
+  }
+  
+  svg.selectAll('.category-label').classed('category-selected', false);
+  svg.selectAll('.data-cell').classed('inactive', false); // Clear inactive styling
+  d3.selectAll('.poster-overlay').remove(); // Clear poster collage
+  showSelectedMovies(null);
+  updateLegendTick(null);
+};
+
+// Show poster collage as tooltip-style overlays
+const showPosterCollage = (cells) => {
+  // Clear any existing poster overlays
+  d3.selectAll('.poster-overlay').remove();
+  
+  // Deduplicate cells by movie ID - keep the first cell for each unique movie
+  const seenMovieIds = new Set();
+  const uniqueCells = [];
+  
+  cells.forEach(cell => {
+    const movieWithPoster = cell.movies.find(m => m.poster);
+    if (movieWithPoster && !seenMovieIds.has(movieWithPoster.id)) {
+      seenMovieIds.add(movieWithPoster.id);
+      uniqueCells.push({ cell, movie: movieWithPoster });
+    }
+  });
+  
+  // Sort by priority (higher priority = drawn last = appears on top)
+  uniqueCells.sort((a, b) => {
+    const aPriority = displayedPosterMovies.indexOf(a.movie.id);
+    const bPriority = displayedPosterMovies.indexOf(b.movie.id);
+    return (bPriority === -1 ? Infinity : bPriority) - (aPriority === -1 ? Infinity : aPriority);
+  });
+  
+  // Create poster overlays
+  uniqueCells.forEach(({ cell, movie }, index) => {
+    const priority = displayedPosterMovies.indexOf(movie.id);
+    const zIndex = priority !== -1 ? 100 + (displayedPosterMovies.length - priority) : 50 + index;
+    createPosterOverlay(cell, movie, zIndex, true);
+  });
+};
+
+// Helper: Sort movies by displayedPosterMovies priority, then by views
+const sortMoviesByPriority = (movies) => {
+  return movies.sort((a, b) => {
+    const aIndex = displayedPosterMovies.indexOf(a.id);
+    const bIndex = displayedPosterMovies.indexOf(b.id);
+    
+    const aIsDisplayed = aIndex !== -1;
+    const bIsDisplayed = bIndex !== -1;
+    
+    if (aIsDisplayed && !bIsDisplayed) return -1;
+    if (!aIsDisplayed && bIsDisplayed) return 1;
+    if (aIsDisplayed && bIsDisplayed) return aIndex - bIndex;
+    
+    return b.views - a.views;
+  });
+};
+
+// Helper: Create a single poster overlay element
+const createPosterOverlay = (cell, movie, zIndex, keepFrontOnClick = true) => {
+  const posterWidth = 200 / 2;
+  const posterHeight = 300 / 2;
+  
+  // Get cell center position
+  const cellX = x(cell.length) + x.bandwidth() / 2;
+  const cellY = y(cell.word) + y.bandwidth() / 2;
+  
+  // Convert to page coordinates
+  const svgElement = svg.node();
+  const svgRect = svgElement.getBoundingClientRect();
+  const pageX = svgRect.left + cellX + margin.left;
+  const pageY = svgRect.top + cellY + margin.top + window.scrollY;
+  
+  // Create poster overlay
+  const posterOverlay = d3.select('body')
+    .append('div')
+    .attr('class', 'poster-overlay')
+    .attr('data-cell-id', `${cell.length}-${cell.word}`)
+    .attr('data-movie-id', movie.id)
+    .style('left', `${pageX - posterWidth / 2}px`)
+    .style('top', `${pageY - posterHeight / 2}px`)
+    .style('width', `${posterWidth}px`)
+    .style('height', `${posterHeight}px`)
+    .style('z-index', zIndex);
+  
+  // Add poster image
+  posterOverlay.append('img')
+    .attr('src', `${posterUrl}${movie.poster}`)
+    .attr('alt', movie.title);
+  
+  // Track if clicked (to keep at front)
+  let isClicked = false;
+  
+  // Hover to bring to front
+  posterOverlay.on('mouseenter', function() {
+    d3.select(this)
+      .classed('hover-front', true)
+      .style('z-index', 1000);
+  });
+  
+  posterOverlay.on('mouseleave', function() {
+    if (!isClicked || !keepFrontOnClick) {
+      d3.select(this)
+        .classed('hover-front', false)
+        .style('z-index', zIndex);
+    }
+  });
+  
+  // Click handler
+  posterOverlay.on('click', function(event) {
+    event.stopPropagation();
+    if (keepFrontOnClick) {
+      isClicked = true;
+      d3.select(this).style('z-index', 1000);
+    }
+    scrollToMovieInAside(movie.id);
+  });
+  
+  return posterOverlay;
+};
+
+// Update poster collage when description is opened/closed in category view
+const updatePosterCollageForDescription = (movie, isExpanding) => {
+  if (!activeCategorySelection || !processedData) return;
+  
+  // Find the cell that contains this movie's word
+  const cell = processedData.find(c => 
+    c.word === movie.word && 
+    c.movies.some(m => m.id === movie.id)
+  );
+  
+  if (!cell) return;
+  
+  if (isExpanding) {
+    // Add movie to displayedPosterMovies if not already there
+    if (!displayedPosterMovies.includes(movie.id)) {
+      displayedPosterMovies.push(movie.id);
+    }
+    
+    // Remove any existing poster for this cell, then create new one
+    d3.selectAll('.poster-overlay')
+      .filter(function() {
+        return d3.select(this).attr('data-cell-id') === `${cell.length}-${cell.word}`;
+      })
+      .remove();
+    
+    if (movie.poster) {
+      createPosterOverlay(cell, movie, 200, false);
+    }
+  } else {
+    // Remove movie from displayedPosterMovies
+    const index = displayedPosterMovies.indexOf(movie.id);
+    if (index !== -1) {
+      displayedPosterMovies.splice(index, 1);
+    }
+    
+    // Remove the poster for this movie
+    d3.selectAll('.poster-overlay')
+      .filter(function() {
+        return d3.select(this).attr('data-movie-id') === movie.id;
+      })
+      .remove();
+  }
+};
+
+// Function to scroll to a specific movie in the aside
+const scrollToMovieInAside = (movieId) => {
+  if (!movieId || !activeCategorySelection) return;
+  
+  // Check if movie is already at the top
+  const existingIndex = displayedPosterMovies.indexOf(movieId);
+  if (existingIndex === 0) {
+    // Already at the top, no need to re-render
+    return;
+  }
+  
+  // Remove from current position if it exists
+  if (existingIndex !== -1) {
+    displayedPosterMovies.splice(existingIndex, 1);
+  }
+  // Add to the top
+  displayedPosterMovies.unshift(movieId);
+  
+  // Re-aggregate and re-render with new sort order
+  const { movies, cells, avgViews } = aggregateMoviesByCategory(activeCategorySelection);
+  
+  // Mark movies that should be expanded based on displayedPosterMovies
+  movies.forEach(movie => {
+    movie.shouldExpand = displayedPosterMovies.includes(movie.id);
+  });
+  
+  showSelectedMovies(
+    activeCategorySelection.words,
+    movies,
+    avgViews,
+    false,
+    true,
+    false,
+    movies.length
+  );
+};
+
 const loadData = async () => {
   const data = await moviesCSV;
 
@@ -696,7 +1045,7 @@ const loadData = async () => {
   totalMovieCount = uniqueMovies.length;
 
   const movieCountElem = d3.select('#movie-count');
-  movieCountElem.html(`${totalMovieCount} movies`);
+  movieCountElem.html(`${totalMovieCount.toLocaleString()} movies`);
   movieCountElem.style.fontWeight = 'normal';
 
   // Step 3: Enrich unique movies with TMDB data
@@ -711,7 +1060,7 @@ const loadData = async () => {
   d3.select('.selected-movie-list').html('<p class="empty-state">Hover over cells for more movie details</p>');
 
   // Step 4: Process enriched data into cells
-  let processedData = processData(movies);
+  processedData = processData(movies); // Store globally for category aggregation
 
   // Step 5: Create SVG and scales (after data is ready)
   svg = d3.select("#heatmap")
@@ -764,7 +1113,7 @@ const loadData = async () => {
     const xOffset = categoryAxisOffset + (level * categorySpacing);
     
     // draw bracket
-    const bracketWidth = 15;
+    const bracketWidth = 12.5;
     // bracket opens to the right, starting at the heatmap edge and extending outward
     svg.append("path")
       .attr("d", `M ${xOffset} ${minY} 
@@ -778,11 +1127,17 @@ const loadData = async () => {
     
     // add category label
     const text = svg.append("text")
-      .attr("x", xOffset + bracketWidth + 10)
+      .attr("class", "category-label")
+      .attr("data-category", category.name)
+      .attr("x", xOffset + bracketWidth + 5)
       .attr("y", centerY)
       .attr("text-anchor", "start")
       .style("font-size", "14px")
-      .style("font-weight", "bold");
+      .style("font-weight", "bold")
+      .style("cursor", "pointer")
+      .on("click", function() {
+        handleCategoryClick(category);
+      });
     
     // check if category name contains & or multiple words
     if (category.name.includes('&') || category.name.includes(' ')) {
@@ -941,7 +1296,7 @@ const loadData = async () => {
   };
 
   // add interactive overlay to legend for hover detection
-  const legendInteractive = legend.append("rect")
+  legend.append("rect")
     .attr("x", legendX)
     .attr("y", legendY - 10)
     .attr("width", legendWidth)
@@ -949,6 +1304,8 @@ const loadData = async () => {
     .style("fill", "transparent")
     .style("cursor", "crosshair")
     .on('mousemove', function(event) {
+      // Block legend hover when category is selected
+      if (activeCategorySelection) return;
       if (activeSelection) return; // don't interfere with active selection
       
       const [mouseX] = d3.pointer(event, legend.node());
@@ -965,6 +1322,8 @@ const loadData = async () => {
       filterCellsByValue(hoverValue);
     })
     .on('mouseout', function() {
+      // Block legend hover exit when category is selected
+      if (activeCategorySelection) return;
       if (activeSelection) return;
       
       updateLegendTick(null);
@@ -988,12 +1347,20 @@ const loadData = async () => {
     // highlight corresponding y label when hovering a grid row
     svg.selectAll('.grid-cell')
       .on('mouseover', function(event, d) {
+        // Block grid hover when category is selected
+        if (activeCategorySelection) return;
         highlightTick(d.word);
       })
       .on('mouseout', function() {
+        // Block grid hover exit when category is selected
+        if (activeCategorySelection) return;
         resetHighlight();
       })
       .on('click', function(event, d) {
+        // Clear category selection if active
+        if (activeCategorySelection) {
+          clearCategorySelection();
+        }
         setActiveSelection(null);
         resetHighlight();
       });
@@ -1010,10 +1377,15 @@ const loadData = async () => {
       .attr("height", y.bandwidth() )
       .style("fill", function(d) { return colorScale(d.value)} )
       .on("mouseover", function(event, d) {
+        // Block all hover interactions when category is selected
+        if (activeCategorySelection) return;
+        
         if (!activeSelection) {
           highlightTick(d.word);
 
-          showSelectedMovies(d.word, d.movies, d.value, false, true, true); // Show toggle icons on cell hover
+          // Clean movies to remove shouldExpand property (so hover never shows expanded descriptions)
+          const cleanMovies = d.movies.map(m => ({ ...m, shouldExpand: false }));
+          showSelectedMovies(d.word, cleanMovies, d.value, false, true, true); // Show toggle icons on cell hover
           updateTooltip(); // Update tooltip based on currentMovies/openDescriptions
           updateLegendTick(d.value); // show tick on hover
           svg.selectAll('.data-cell').classed('inactive', false).classed('legend-active', false); // clear filtering
@@ -1021,6 +1393,9 @@ const loadData = async () => {
         // When there's an active selection, tooltip stays locked - do nothing on hover
       })
       .on("mousemove", function(event, d) {
+        // Block tooltip movement when category is selected
+        if (activeCategorySelection) return;
+        
         // Only allow tooltip to move if there's no active selection
         if (!activeSelection) {
           positionTooltip(event);
@@ -1028,6 +1403,9 @@ const loadData = async () => {
         // When there's an active selection, tooltip stays locked at its position
       })
       .on("mouseout", function() {
+        // Block hover exit when category is selected
+        if (activeCategorySelection) return;
+        
         resetHighlight();
 
         if (!activeSelection) {
@@ -1058,13 +1436,18 @@ const loadData = async () => {
 
 // Add document-level click handler to clear selection when clicking outside
 document.addEventListener('click', (event) => {
-  // Only clear if there's an active selection and we didn't click on the heatmap or aside
-  if (activeSelection) {
-    const clickedOnHeatmap = event.target.closest('#heatmap');
-    const clickedOnAside = event.target.closest('.aside');
-    
-    if (!clickedOnHeatmap && !clickedOnAside) {
+  const clickedOnHeatmap = event.target.closest('#heatmap');
+  const clickedOnAside = event.target.closest('.aside');
+  const clickedOnPosterOverlay = event.target.closest('.poster-overlay');
+  
+  if (!clickedOnHeatmap && !clickedOnAside && !clickedOnPosterOverlay) {
+    // Clear cell selection if active
+    if (activeSelection) {
       setActiveSelection(null);
+    }
+    // Clear category selection if active
+    if (activeCategorySelection) {
+      clearCategorySelection();
     }
   }
 });
@@ -1076,7 +1459,8 @@ const exploreBtn = document.getElementById('explore-btn');
 // Load data in background
 loadData().then(() => {
   // Show button when data is ready
-  exploreBtn.style.visibility = 'visible';
+  exploreBtn.innerHTML = 'Explore'
+  exploreBtn.disabled = false;
 });
 
 // Handle explore button click
