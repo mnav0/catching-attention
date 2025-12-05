@@ -11,12 +11,20 @@
   <link rel="stylesheet" href="./src/style.css" />
 </head>
 <body>
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-content">
+      <h1 class="loading-title">Catching Attention</h1>
+      <p>72% of movies watched on Netflix from January - June 2025 have titles with 5 or fewer words.<br><span>What attributes (words/word categories, runtime, imagery, text sentiment) spark interest and drive viewership?</span></p>
+      <p>Using data from <a href="https://about.netflix.com/en/news/what-we-watched-the-first-half-of-2025" target="_blank">What We Watched the First Half of 2025</a> and <a href="https://www.themoviedb.org/?language=en-US" target="_blank">The Movie Database</a>, movies are filtered to consider the subset of these shorter titles that contain the top 50 highest occurring words.</p>
+      <button id="explore-btn" class="explore-btn" style="visibility: hidden;">Explore</button>
+    </div>
+  </div>
+
   <div class="container">
     <div class="text">
       <h1>Catching <span>Attention</span></h1>
-      <p>72% of movies watched on Netflix from January - June 2025 have titles with 5 or fewer words.</p>
-      <p>What attributes (words/word categories, runtime, imagery, text sentiment) spark interest and drive viewership?</p>
-      <p class="subtext"><a href="https://about.netflix.com/en/news/what-we-watched-the-first-half-of-2025" target="_blank">Data</a> is filtered to the subset of these shorter English titles that contain the top 50 highest occurring words.<br>Color indicates the average number of views for each word/runtime pairing. Sentiment analysis considers movie title and description.</p>
+      <p class="subtext">Color indicates the average number of views for each word/runtime pairing. Sentiment analysis considers movie title and description, and colors each description's sentence accordingly.</p>
     </div>
 
     <div class="vis-wrapper">

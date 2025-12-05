@@ -1069,4 +1069,21 @@ document.addEventListener('click', (event) => {
   }
 });
 
-loadData();
+// Loading screen functionality
+const loadingScreen = document.getElementById('loading-screen');
+const exploreBtn = document.getElementById('explore-btn');
+
+// Load data in background
+loadData().then(() => {
+  // Show button when data is ready
+  exploreBtn.style.visibility = 'visible';
+});
+
+// Handle explore button click
+exploreBtn.addEventListener('click', () => {
+  loadingScreen.classList.add('hidden');
+  // Remove from DOM after transition completes
+  setTimeout(() => {
+    loadingScreen.style.display = 'none';
+  }, 500);
+});
