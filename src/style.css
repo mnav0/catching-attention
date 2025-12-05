@@ -11,7 +11,11 @@ h4 {
 }
 
 h1 {
-  font-size: 36px;
+  font-size: 18px;
+}
+
+h1 span {
+  font-weight: bold;
 }
 
 text {
@@ -60,7 +64,7 @@ a {
   top: 20px;
   display: flex;
   flex-direction: column;
-  gap: 0.5em;
+  gap: 0;
   width: 350px;
   z-index: 1000;
   align-self: flex-start;
@@ -69,17 +73,9 @@ a {
 .selected-movie-list {
   background-color: white;
   border: 1px solid #16161d33;
-  padding: 0.5em 1em;
-  max-height: 70vh;
+  padding: 1em;
+  max-height: 61.5vh;
   overflow-y: auto;
-}
-
-.empty-state {
-  font-size: 12px;
-}
-
-.empty-state span {
-  font-style: italic;
 }
 
 .toggle-icon {
@@ -167,7 +163,7 @@ a {
   z-index: 1000;
   width: 200px;
   height: 300px;
-  transition: opacity 0.5s linear;
+  transition: opacity background-color 0.5s linear;
 }
 
 .loading-tooltip {
@@ -201,11 +197,11 @@ a {
   font-size: 12px;
   text-align: center;
   margin: 0 0 0.5em 0;
-  min-height: 1.2em;
+  line-height: 1.25;
 }
 
 .sentiment-bar {
-  width: 350px;
+  width: 348px;
   height: 12px;
   background-color: white;
   border: 1px solid #16161d33;
@@ -217,7 +213,8 @@ a {
   position: absolute;
   top: 0;
   height: 100%;
-  transition: left 0.5s ease-in-out, width 0.5s ease-in-out, background-color 0.5s ease-in-out;
+  transition: left 0.5s ease-in-out, width 0.5s ease-in-out,
+    background-color 0.5s ease-in-out;
   width: 0;
 }
 
@@ -227,11 +224,67 @@ a {
   top: 0;
   width: 1px;
   height: 100%;
-  background-color: #6C6A4F;
+  background-color: #6c6a4f;
   transform: translateX(-50%);
   z-index: 1;
 }
 
 .sentiment-bar-container {
-  margin-bottom: 0.5em;
+  margin: 1em 0;
+}
+
+.movie-count {
+  font-size: 12px;
+  text-align: center;
+  margin: 1em 0 0 0;
+}
+
+.movie-count-selected {
+  font-weight: bold;
+}
+
+.empty-state {
+  font-size: 12px;
+  font-style: italic;
+}
+
+.movie-count span {
+  font-style: italic;
+  font-weight: normal;
+}
+
+/* Individual movie sentiment bars */
+.movie-sentiment-container {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.75em;
+  margin-top: 0.5em;
+}
+
+.movie-sentiment-bar {
+  background-color: white;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.movie-sentiment-fill {
+  position: relative;
+  height: 12px;
+  width: 0;
+}
+
+.movie-sentiment-text {
+  margin-left: 0.25em;
+  font-size: 12px;
+  color: #16161d;
+  white-space: nowrap;
+}
+
+.spacer {
+  background: #16161d33;
+  height: 1px;
+  position: relative;
+  top: 15px;
 }

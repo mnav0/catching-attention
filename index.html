@@ -13,10 +13,10 @@
 <body>
   <div class="container">
     <div class="text">
-      <h1>Catching Attention</h1>
+      <h1>Catching <span>Attention</span></h1>
       <p>72% of movies watched on Netflix from January - June 2025 have titles with 5 or fewer words.</p>
       <p>What attributes (words/word categories, runtime, imagery, text sentiment) spark interest and drive viewership?</p>
-      <p class="subtext"><a href="https://about.netflix.com/en/news/what-we-watched-the-first-half-of-2025" target="_blank">Data</a> is filtered to the subset of these shorter English titles that contain the top 50 highest occurring words.<br>Color indicates the average number of views for each word/runtime pairing. Sentiment analysis considers movie titles (and descriptions when displayed).</p>
+      <p class="subtext"><a href="https://about.netflix.com/en/news/what-we-watched-the-first-half-of-2025" target="_blank">Data</a> is filtered to the subset of these shorter English titles that contain the top 50 highest occurring words.<br>Color indicates the average number of views for each word/runtime pairing. Sentiment analysis considers movie title and description.</p>
     </div>
 
     <div class="vis-wrapper">
@@ -28,8 +28,9 @@
 
       <div class="aside">
         <div id="legend"></div>
+        <div id="movie-count" class="movie-count"></div>
         <div class="sentiment-bar-container">
-          <p id="sentiment-label" class="sentiment-label">Average sentiment</p>
+          <p id="sentiment-label" class="sentiment-label"></p>
           <div id="sentiment-bar" class="sentiment-bar">
             <div class="sentiment-fill"></div>
             <div class="sentiment-divider"></div>

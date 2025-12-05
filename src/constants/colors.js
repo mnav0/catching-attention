@@ -1,7 +1,7 @@
 export const colors = {
   dark: "#16161D",
   light: "#FCF7E9",
-  scaleLight: "#d9eaf0ff",
+  scaleLight: "#e5f5fbff",
   scaleMid: "#597787ff",
   scaleDark: "#031f2eff",
   sentimentPositive: "#0E8E51",
